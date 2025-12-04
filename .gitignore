@@ -1,0 +1,61 @@
+# Python bytecode & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Playwright
+playwright/.cache/
+ms-playwright/
+
+# Editor/OS noise
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets & local state
+.env
+auth.json
+cookies.json
+
+# Runtime output
+output/
+screenshots/
+downloads/
+*.png
+*.jpg
+*.jpeg
+*.log
+
+# Tests & tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
