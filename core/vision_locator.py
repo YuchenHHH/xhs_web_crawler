@@ -160,9 +160,6 @@ class VisionLocator:
 1. 识别页面上最多 {max_notes} 个笔记卡片（通常是带有封面图的矩形区域）
 2. 对于每个笔记卡片，提供：
    - 可点击的中心坐标 (x, y)
-   - 边界框信息 (x, y, width, height)
-   - 笔记标题（如果图片中能看到）
-   - 笔记ID（如果图片中有URL或ID信息）
 
 **笔记卡片的特征**（必须满足）：
 - 包含一张较大的封面图片（通常是内容截图或照片）
@@ -238,20 +235,26 @@ class VisionLocator:
             # 提取笔记列表
             notes = data.get("notes", [])
 
-            # 验证和清理数据
+            # 验证和清理数据（现在只需要坐标）
             cleaned_notes = []
             for note in notes:
-                if "click_x" in note and "click_y" in note:
-                    if int(note["click_x"]) < 300:
-                        continue
-                    cleaned_notes.append({
-                        "index": note.get("index", len(cleaned_notes)),
-                        "click_x": int(note["click_x"]),
-                        "click_y": int(note["click_y"]),
-                        "bounding_box": note.get("bounding_box", {}),
-                        "title": note.get("title", ""),
-                        "note_id": note.get("note_id", "")
-                    })
+                # 必须有坐标才有效
+                if "click_x" not in note or "click_y" not in note:
+                    continue
+
+                # 过滤掉左侧边栏的点（通常是导航）
+                if int(note["click_x"]) < 300:
+                    continue
+
+                cleaned_notes.append({
+                    "index": note.get("index", len(cleaned_notes)),
+                    "click_x": int(note["click_x"]),
+                    "click_y": int(note["click_y"]),
+                    # 以下字段可选，如果大模型返回就保留，否则为空
+                    "bounding_box": note.get("bounding_box", {}),
+                    "title": note.get("title", ""),
+                    "note_id": note.get("note_id", "")
+                })
 
             return cleaned_notes
 

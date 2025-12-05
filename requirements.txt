@@ -12,6 +12,9 @@ langchain-core>=0.1.0
 # OpenAI - GPT-4o Vision API
 openai>=1.12.0
 
+# 图像处理（相似度检测使用 dhash）
+Pillow>=10.0.0
+
 # Python-dotenv - 环境变量管理
 python-dotenv>=1.0.0
 

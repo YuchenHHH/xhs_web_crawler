@@ -1,180 +1,132 @@
 """
-Agent 图编排
-使用 LangGraph 构建节点流程图
+LangGraph 最小化编排：只负责截图、识别坐标并顺序点击。
+其余登录、搜索、数据处理流程改为普通 Python 逻辑。
 """
 from langgraph.graph import StateGraph, END
 
-from agent.state import AgentState
-from agent.nodes import (
-    init_browser_node,
-    check_login_node,
-    manual_login_and_save_cookies_node,
-    search_keyword_node,
-    # 新增笔记处理节点
-    collect_note_links_node,
-    process_note_detail_node,
-    navigate_back_node,
-    scroll_for_more_notes_node,
-    finalize_extraction_node,
-    # 扩展节点（暂不使用）
-    # vision_analysis_node,
-    # download_images_node,
-)
+from agent.state import ClickGraphState
+from agent.click_nodes import collect_coordinates_node, click_coordinate_node, scroll_and_wait_node
 
 
-def route_after_collection(state: AgentState) -> str:
+def _route_after_collect(state: ClickGraphState) -> str:
+    return "click" if state.get("coordinates") else "done"
+
+
+def _route_after_click(state: ClickGraphState) -> str:
     """
-    路由函数：收集笔记链接后决定下一步
+    点击后路由：
+    - 如果还有坐标未点击，继续点击下一个
+    - 如果当前轮次的坐标已全部点击完，检查是否需要进入下一轮
+    - 如果所有轮次已完成，结束
+    """
+    coords = state.get("coordinates", [])
+    idx = state.get("current_index", 0)
+    current_round = state.get("current_round", 1)
+    total_rounds = state.get("total_rounds", 1)
+
+    # 如果还有坐标未点击，继续点击
+    if idx < len(coords):
+        return "next"
+
+    # 当前轮次点击完成，检查是否需要下一轮
+    if current_round < total_rounds:
+        return "scroll"  # 滚动页面，准备下一轮
+
+    # 所有轮次完成
+    return "done"
+
+
+def _route_after_scroll(state: ClickGraphState) -> str:
+    """
+    滚动后路由：重新收集坐标
+    """
+    return "collect"
+
+
+def create_click_graph():
+    """
+    创建包含"截图+坐标识别+顺序点击+滚动循环"的图。
+
+    流程：
+    1. collect_coordinates: 截图并识别坐标
+    2. click_coordinate: 顺序点击每个坐标
+    3. scroll_and_wait: 滚动页面加载更多内容（可选，当需要多轮时）
+    4. 返回步骤1，重新收集坐标（循环）
+    """
+    workflow = StateGraph(ClickGraphState)
+
+    # 添加节点
+    workflow.add_node("collect_coordinates", collect_coordinates_node)
+    workflow.add_node("click_coordinate", click_coordinate_node)
+    workflow.add_node("scroll_and_wait", scroll_and_wait_node)
+
+    # 设置入口
+    workflow.set_entry_point("collect_coordinates")
+
+    # 路由：收集坐标后
+    workflow.add_conditional_edges(
+        "collect_coordinates",
+        _route_after_collect,
+        {"click": "click_coordinate", "done": END},
+    )
+
+    # 路由：点击后
+    workflow.add_conditional_edges(
+        "click_coordinate",
+        _route_after_click,
+        {
+            "next": "click_coordinate",  # 继续点击下一个坐标
+            "scroll": "scroll_and_wait",  # 滚动加载更多
+            "done": END,  # 结束
+        },
+    )
+
+    # 路由：滚动后
+    workflow.add_conditional_edges(
+        "scroll_and_wait",
+        _route_after_scroll,
+        {"collect": "collect_coordinates"},  # 重新收集坐标
+    )
+
+    return workflow.compile()
+
+
+async def run_click_graph(
+    page,
+    max_notes: int = 20,
+    total_rounds: int = 1,
+    browse_images_arrow_count: int = 5,
+    content_description: str = "",
+    output_dir: str = "",
+    recursion_limit: int = 100,
+) -> ClickGraphState:
+    """
+    便捷函数：运行最小点击图并返回最终状态。
 
     Args:
-        state: Agent 状态
-
-    Returns:
-        下一个节点的名称
+        page: Playwright Page 对象
+        max_notes: 每轮最多点击的笔记数量（默认20）
+        total_rounds: 总共执行的轮次（默认1，设置>1可循环）
+    browse_images_arrow_count: 进入详情页后按右键浏览图片的次数（默认5）
+    content_description: 内容描述，用于过滤笔记（让 LLM 只选择符合描述的笔记）
+    output_dir: 输出目录路径，用于保存截图
+    recursion_limit: LangGraph 递归上限（默认100，避免多轮循环时达到25的默认限制）
     """
-    note_links = state.get("note_links", [])
-
-    if len(note_links) > 0:
-        return "process_first_note"
-    else:
-        return "no_notes_found"
-
-
-def route_after_login_check(state: AgentState) -> str:
-    """
-    路由函数：登录检测后决定是否需要手动登录
-    """
-    return "logged_in" if state.get("is_logged_in") else "need_manual_login"
-
-
-def route_after_manual_login(state: AgentState) -> str:
-    """
-    路由函数：手动登录节点之后决定下一步
-    """
-    return "login_ready" if state.get("is_logged_in") else "login_still_required"
-
-
-def route_after_back(state: AgentState) -> str:
-    """
-    路由函数：返回搜索页后决定是否继续处理下一个笔记
-
-    Args:
-        state: Agent 状态
-
-    Returns:
-        下一个节点的名称
-    """
-    current_index = state.get("current_note_index", 0)
-    max_notes = state.get("max_notes_to_process", 3)
-    note_links = state.get("note_links", [])
-    processed_total = len(state.get("processed_notes", [])) + len(state.get("failed_notes", []))
-
-    # 如果还有笔记需要处理，且未达到最大数量，继续处理
-    if current_index < len(note_links) and processed_total < max_notes:
-        return "process_next_note"
-
-    # 如果当前批次耗尽但仍未达到最大数量，尝试滚动加载新一批
-    if processed_total < max_notes:
-        return "need_more_notes"
-
-    return "all_notes_processed"
-
-
-def create_agent_graph():
-    """
-    创建并编译 Agent 工作流图
-
-    新流程:
-        init_browser -> check_login -> search_keyword ->
-        collect_note_links -> [条件判断] ->
-        process_note_detail -> navigate_back -> [循环或结束] ->
-        finalize_extraction -> END
-
-    Returns:
-        编译后的 LangGraph 应用
-    """
-    # 创建状态图
-    workflow = StateGraph(AgentState)
-
-    # === 添加所有节点 ===
-    workflow.add_node("init_browser", init_browser_node)
-    workflow.add_node("check_login", check_login_node)
-    workflow.add_node("manual_login_and_save_cookies", manual_login_and_save_cookies_node)
-    workflow.add_node("search_keyword", search_keyword_node)
-    workflow.add_node("collect_note_links", collect_note_links_node)
-    workflow.add_node("process_note_detail", process_note_detail_node)
-    workflow.add_node("navigate_back", navigate_back_node)
-    workflow.add_node("scroll_for_more_notes", scroll_for_more_notes_node)
-    # 暂时注释掉提取节点，专注自动化点击（如需数据保存，请恢复）
-    # workflow.add_node("finalize_extraction", finalize_extraction_node)
-
-    # === 设置入口点 ===
-    workflow.set_entry_point("init_browser")
-
-    # === 线性边 ===
-    workflow.add_edge("init_browser", "check_login")
-
-    # === 条件边：登录检测后 ===
-    workflow.add_conditional_edges(
-        "check_login",
-        route_after_login_check,
-        {
-            "logged_in": "search_keyword",
-            "need_manual_login": "manual_login_and_save_cookies"
-        }
-    )
-
-    # === 条件边：手动登录后 ===
-    workflow.add_conditional_edges(
-        "manual_login_and_save_cookies",
-        route_after_manual_login,
-        {
-            "login_ready": "search_keyword",
-            "login_still_required": "search_keyword"  # 即便未登录也继续执行，后续可能再提示
-        }
-    )
-
-    workflow.add_edge("search_keyword", "collect_note_links")
-
-    # === 条件边 1: 收集链接后 ===
-    workflow.add_conditional_edges(
-        "collect_note_links",
-        route_after_collection,
-        {
-            "process_first_note": "process_note_detail",
-            "no_notes_found": END
-        }
-    )
-
-    # === 处理笔记后返回 ===
-    workflow.add_edge("process_note_detail", "navigate_back")
-
-    # === 条件边 2: 返回后决定循环或结束 ===
-    workflow.add_conditional_edges(
-        "navigate_back",
-        route_after_back,
-        {
-            "process_next_note": "process_note_detail",  # 循环回处理节点
-            "need_more_notes": "scroll_for_more_notes",  # 滚动加载新一批
-            "all_notes_processed": END  # 结束处理
-        }
-    )
-    # === 滚动后重新收集笔记 ===
-    workflow.add_edge("scroll_for_more_notes", "collect_note_links")
-
-    # 编译图
-    app = workflow.compile()
-
-    return app
-
-
-# 便捷函数：直接获取编译好的 app
-def get_compiled_graph():
-    """
-    获取编译后的 Agent 图
-    可直接用于 main.py 中
-
-    Returns:
-        编译后的 LangGraph 应用
-    """
-    return create_agent_graph()
+    app = create_click_graph()
+    initial_state: ClickGraphState = {
+        "page": page,
+        "max_notes": max_notes,
+        "press_escape_after_click": True,
+        "browse_images_arrow_count": browse_images_arrow_count,
+        "content_description": content_description,
+        "output_dir": output_dir,
+        "coordinates": [],
+        "current_index": 0,
+        "clicked": [],
+        "failures": [],
+        "screenshot_base64": None,
+        "step": "start",
+        "total_rounds": total_rounds,
+        "current_round": 1,
+    }
+    return await app.ainvoke(initial_state, config={"recursion_limit": recursion_limit})

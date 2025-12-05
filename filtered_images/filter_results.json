@@ -1,0 +1,263 @@
+{
+  "description": "只保留包含成品菜肴的图片，排除原料、包装、菜单、文字截图",
+  "model": "gpt-4o",
+  "kept": 14,
+  "total": 51,
+  "details": [
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note1_marker2/image_001.png",
+      "keep": false,
+      "reason": "图片主要是文字截图，没有显示成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note1_marker2/image_002.png",
+      "keep": false,
+      "reason": "图片主要是一个应用界面截图，没有展示成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note2_marker6/image_003.png",
+      "keep": false,
+      "reason": "图片主要展示的是豆腐的烹饪过程，而非成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note2_marker6/image_004.png",
+      "keep": false,
+      "reason": "图片包含文字和步骤说明，不仅仅是成品菜肴的展示。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note2_marker6/image_001.png",
+      "keep": false,
+      "reason": "图片包含原料包装和成品菜肴，但用户描述要求排除原料和包装。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note2_marker6/image_002.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round3_note1_marker6/image_002.png",
+      "keep": false,
+      "reason": "图片包含多个元素，包括原料、包装、菜单和成品菜肴。整体不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round3_note1_marker6/image_001.png",
+      "keep": false,
+      "reason": "图片包含多个元素，包括原料、包装、菜单和成品菜肴。整体不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_004.png",
+      "keep": true,
+      "reason": "图片中展示了成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_005.png",
+      "keep": true,
+      "reason": "图片中包含成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_006.png",
+      "keep": true,
+      "reason": "图片中包含成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_002.png",
+      "keep": false,
+      "reason": "图片包含了成品菜肴和大量文字信息，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_003.png",
+      "keep": false,
+      "reason": "图片包含了制作过程和文字说明，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note2_marker3/image_001.png",
+      "keep": true,
+      "reason": "图片中包含成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_005.png",
+      "keep": false,
+      "reason": "图片包含成品菜肴和大量文字信息，不符合仅保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_006.png",
+      "keep": false,
+      "reason": "图片包含成品菜肴和大量文字信息，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_004.png",
+      "keep": true,
+      "reason": "图片中展示了成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_007.png",
+      "keep": false,
+      "reason": "图片包含了成品菜肴和大量文字信息，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_003.png",
+      "keep": false,
+      "reason": "图片包含原料和制作过程的步骤说明，不是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note3_marker5/image_002.png",
+      "keep": false,
+      "reason": "图片包含了成品菜肴和大量文字信息，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_002.png",
+      "keep": false,
+      "reason": "图片主要展示的是调料和原料的组合，而不是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note4_marker6/image_001.png",
+      "keep": false,
+      "reason": "图片包含原料包装和文字截图，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round1_note3_marker5/image_001.png",
+      "keep": false,
+      "reason": "图片包含文字和社交媒体界面，不仅仅是成品菜肴的图片。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note1_marker6/image_001.png",
+      "keep": false,
+      "reason": "图片主要内容为文字截图，没有展示成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note1_marker6/image_002.png",
+      "keep": false,
+      "reason": "图片主要是一个应用界面截图，包含文字和评论，没有清晰展示成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note3_marker8/image_004.png",
+      "keep": false,
+      "reason": "图片包含多个步骤的制作过程和文字说明，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note3_marker8/image_003.png",
+      "keep": false,
+      "reason": "图片主要展示了调料和原料的准备过程，不是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note3_marker8/image_002.png",
+      "keep": true,
+      "reason": "图片中展示了成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note3_marker8/image_005.png",
+      "keep": false,
+      "reason": "图片包含多个步骤的制作过程和文字说明，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note3_marker8/image_001.png",
+      "keep": false,
+      "reason": "图片中包含了文字和社交媒体界面元素，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note6_marker12/image_002.png",
+      "keep": false,
+      "reason": "图片包含文字和社交媒体界面，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note7_marker13/image_005.png",
+      "keep": false,
+      "reason": "图片包含文字和社交媒体界面，不仅仅是成品菜肴的图片。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note7_marker13/image_004.png",
+      "keep": false,
+      "reason": "图片包含文字和菜单信息，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note6_marker12/image_001.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note7_marker13/image_001.png",
+      "keep": false,
+      "reason": "图片包含文字和社交媒体界面，不仅仅是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note7_marker13/image_002.png",
+      "keep": false,
+      "reason": "图片包含大量文字信息和社交媒体界面，不仅仅是成品菜肴的展示。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note7_marker13/image_003.png",
+      "keep": false,
+      "reason": "图片包含原料、制作过程和文字说明，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_004.png",
+      "keep": false,
+      "reason": "图片中展示的是食材原料，而非成品菜肴，不符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_005.png",
+      "keep": false,
+      "reason": "图片主要展示了烹饪过程和步骤说明，不是成品菜肴的图片。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_006.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_003.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_007.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_002.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note2_marker7/image_002.png",
+      "keep": false,
+      "reason": "图片主要是关于豆腐种类和热量的文字信息，不是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note2_marker7/image_001.png",
+      "keep": false,
+      "reason": "图片主要是关于豆腐种类和热量的文字信息，不是成品菜肴。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note4_marker10/image_001.png",
+      "keep": true,
+      "reason": "图片中包含一盘成品菜肴，符合用户描述的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note1_marker5/image_002.png",
+      "keep": false,
+      "reason": "图片包含了成品菜肴和制作过程的文字截图，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note1_marker5/image_001.png",
+      "keep": true,
+      "reason": "图片中展示了一道成品菜肴，符合用户描述要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round4_note1_marker5/image_003.png",
+      "keep": false,
+      "reason": "图片包含了成品菜肴和制作过程的文字截图，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note5_marker11/image_001.png",
+      "keep": false,
+      "reason": "图片主要是一个应用界面截图，包含文字和评论，不符合只保留成品菜肴的要求。"
+    },
+    {
+      "file": "output/板豆腐_20251205_153136/round2_note5_marker11/image_002.png",
+      "keep": false,
+      "reason": "图片主要是应用界面截图，包含文字和评论，不符合只保留成品菜肴的要求。"
+    }
+  ]
+}

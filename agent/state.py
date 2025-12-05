@@ -40,3 +40,23 @@ class AgentState(TypedDict):
     step: str  # 当前执行到的步骤（用于调试和日志）
     is_logged_in: bool  # 登录状态标识
     error_message: Optional[str]  # 错误信息（如果发生错误）
+
+
+class ClickGraphState(TypedDict):
+    """
+    LangGraph 精简状态：仅负责截图、坐标输出与顺序点击
+    """
+    page: Page  # Playwright Page 对象
+    max_notes: int  # 最多点击的笔记数量
+    press_escape_after_click: bool  # 是否在每次点击后按 ESC 返回
+    browse_images_arrow_count: int  # 进入详情页后按右键浏览图片的次数（默认5）
+    content_description: str  # 内容描述，用于过滤笔记（让 LLM 只选择符合描述的笔记）
+    output_dir: str  # 输出目录路径，用于保存截图
+    coordinates: List[Dict]  # 识别到的坐标列表
+    current_index: int  # 当前处理的坐标索引
+    clicked: List[Dict]  # 成功点击的记录
+    failures: List[Dict]  # 失败记录
+    screenshot_base64: Optional[str]  # 搜索页截图（Base64，可选）
+    step: str  # 当前步骤标识
+    total_rounds: int  # 总共要执行的轮次（默认1，设置>1可循环）
+    current_round: int  # 当前执行的轮次

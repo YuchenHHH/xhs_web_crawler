@@ -193,8 +193,8 @@ async def search_keyword_node(state: AgentState) -> dict:
 
         print("✅ 搜索完成，结果已加载")
 
-        # 额外滚动一次，触发懒加载更多结果
-        await _scroll_once_for_results(page)
+        # 不在搜索后立即滚动，保持页面在初始状态
+        # await _scroll_once_for_results(page)
 
         # 截图保存（可选，方便调试）
         # await page.screenshot(path=f"search_result_{keyword}.png")
@@ -913,21 +913,36 @@ async def _human_like_click(page: Page, x: int, y: int):
 async def _verify_detail_page_entry(page: Page, before_url: str, timeout: int = 8000) -> Dict:
     """
     判断是否从搜索页进入了笔记详情页。
+
+    URL 判断规则：
+    - 详情页: https://www.xiaohongshu.com/explore/66c32e22000000001f01fd24?...
+    - 搜索页(未变): https://www.xiaohongshu.com/search_result?keyword=...
+    - 搜索页(相关搜索): https://www.xiaohongshu.com/search_result?keyword=...（keyword变了）
     """
     from config.settings import XHS_NOTE_DETAIL_SELECTORS
 
     detail_url_keywords = ["/explore/", "/discovery/item/"]
+    search_url_keywords = ["/search_result"]
     selectors = list(XHS_NOTE_DETAIL_SELECTORS.values())
     deadline = asyncio.get_event_loop().time() + timeout / 1000
 
     while asyncio.get_event_loop().time() < deadline:
         current_url = page.url
 
-        # URL 变化且包含详情标识
-        if current_url != before_url and any(k in current_url for k in detail_url_keywords):
-            return {"entered": True, "via": "url_changed", "url": current_url}
+        # 1. 优先检查：如果包含详情页路径，立即返回成功
+        if any(k in current_url for k in detail_url_keywords):
+            return {"entered": True, "via": "url_explore_path", "url": current_url}
 
-        # 通过详情页特征元素检测
+        # 2. 如果仍在搜索页，说明点击无效（点到空白或"大家都想搜"）
+        if any(k in current_url for k in search_url_keywords):
+            # 即使 URL 稍有变化（如 keyword 变了），仍然是搜索页
+            return {
+                "entered": False,
+                "reason": "still_on_search_page",
+                "url": current_url
+            }
+
+        # 3. 通过详情页特征元素检测（兜底方案）
         for sel in selectors:
             try:
                 locator = page.locator(sel).first
@@ -940,7 +955,7 @@ async def _verify_detail_page_entry(page: Page, before_url: str, timeout: int = 
 
     return {
         "entered": False,
-        "reason": "detail markers not found",
+        "reason": "detail markers not found (timeout)",
         "url": page.url
     }
 
