@@ -60,6 +60,17 @@ XHS_NOTE_DETAIL_SELECTORS = {
     "likes": "[class*='like-count'], .like-wrapper",
 }
 
+# ========== 笔记详情页图片选择器 ==========
+# 按优先级排序，优先尝试更精确的选择器
+XHS_NOTE_IMAGE_SELECTORS = [
+    ".carousel img",  # 轮播图中的图片
+    ".note-slider img",  # 笔记轮播中的图片
+    "[class*='swiper'] img",  # Swiper 组件中的图片
+    ".note-detail img",  # 详情页中的图片
+    "img[src*='sns-img']",  # 小红书图片 CDN
+    ".note-content img",  # 内容区域的图片
+]
+
 # ========== OpenAI 模型配置 ==========
 OPENAI_MODEL = "gpt-4o"  # 使用的 OpenAI 模型名称
 OPENAI_TEMPERATURE = 0.2  # 模型温度，越低越稳定

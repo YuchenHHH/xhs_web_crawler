@@ -248,7 +248,7 @@ def run():
     便捷启动函数（同步包装）
     支持命令行参数
     """
-    parser = argparse.ArgumentParser(description="小红书爬虫 Agent - 并发采集模式")
+    parser = argparse.ArgumentParser(description="小红书爬虫 Agent")
     parser.add_argument(
         "--concurrent",
         "-c",
