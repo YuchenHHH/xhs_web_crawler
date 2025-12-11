@@ -107,13 +107,14 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
             logger.info(f"   - 📸 进入详情页，开始浏览图片")
             # 生成笔记ID（用于文件夹命名）
             note_id = f"round{current_round}_note{idx+1}_marker{marker_id}"
-            await _browse_images_with_arrow_keys(
+            saved_images = await _browse_images_with_arrow_keys(
                 page,
                 arrow_count=arrow_count,
                 output_dir=output_dir,
-                note_id=note_id
+                note_id=note_id,
+                state=state
             )
-            print("   - ✅ 图片浏览完成")
+            logger.info(f"   - ✅ 图片浏览完成，保存了{saved_images}张图片")
 
         if press_escape:
             await _press_escape(page)
@@ -244,8 +245,9 @@ async def _browse_images_with_arrow_keys(
     page: Page,
     arrow_count: int = 5,
     output_dir: str = "",
-    note_id: str = ""
-):
+    note_id: str = "",
+    state: Dict = None
+) -> int:
     """
     在笔记详情页，按右键浏览图片轮播。
     如果检测到图片重复或高度相似（到达最后一张），自动结束浏览。
@@ -256,12 +258,20 @@ async def _browse_images_with_arrow_keys(
         arrow_count: 按右键的次数（默认5次）
         output_dir: 输出根目录路径
         note_id: 笔记ID，用于创建子目录
+        state: 状态字典，用于更新图片总数
+
+    Returns:
+        实际保存的图片数量
     """
     from pathlib import Path
 
     try:
         # 等待详情页稳定
         await asyncio.sleep(0.5)
+
+        # 获取图片限制配置
+        max_images = state.get("max_images") if state else None
+        total_images = state.get("total_images", 0) if state else 0
 
         # 创建笔记专属目录（如果提供了参数）
         note_dir = None
@@ -270,19 +280,35 @@ async def _browse_images_with_arrow_keys(
             note_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"   - 📁 创建图片保存目录: {note_dir}")
 
+        # 检查是否已达到图片总数限制
+        if max_images and total_images >= max_images:
+            logger.warning(f"   - ⚠️ 已达到图片总数限制({max_images}张)，跳过浏览")
+            return 0
+
         # 初始截图（第一张图）
         prev_screenshot = await page.screenshot(type="png")
         prev_hash = _compute_image_hash(prev_screenshot)
 
         # 保存第一张图片
+        saved_count = 0
         if note_dir:
             screenshot_path = note_dir / "image_001.png"
             screenshot_path.write_bytes(prev_screenshot)
             logger.info(f"   - 💾 保存: {screenshot_path.name}")
+            saved_count = 1
+            if state:
+                state["total_images"] = total_images + 1
 
         actual_browsed = 1  # 实际浏览的图片数（包含首张）
 
         for i in range(arrow_count):
+            # 检查是否已达到图片总数限制
+            if state and max_images:
+                current_total = state.get("total_images", 0)
+                if current_total >= max_images:
+                    logger.info(f"   - 🎯 已达到图片总数限制({max_images}张)，停止浏览")
+                    break
+
             # 按右键
             await page.keyboard.press("ArrowRight")
             # 等待图片切换
@@ -298,6 +324,9 @@ async def _browse_images_with_arrow_keys(
                 screenshot_path = note_dir / f"image_{str(i + 2).zfill(3)}.png"
                 screenshot_path.write_bytes(current_screenshot)
                 logger.info(f"   - 💾 保存: {screenshot_path.name}")
+                saved_count += 1
+                if state:
+                    state["total_images"] = state.get("total_images", 0) + 1
 
             # 对比截图是否相同或高度相似
             is_duplicate = False
@@ -316,6 +345,9 @@ async def _browse_images_with_arrow_keys(
                 if screenshot_path and screenshot_path.exists():
                     screenshot_path.unlink()
                     logger.info(f"   - 🗑️  删除重复截图: {screenshot_path.name}")
+                    saved_count -= 1
+                    if state:
+                        state["total_images"] = max(0, state.get("total_images", 0) - 1)
                 break
 
             # 更新上一张截图
@@ -326,8 +358,11 @@ async def _browse_images_with_arrow_keys(
             # 正常完成所有浏览
             logger.info(f"   - 📸 完成图片浏览（共按 {arrow_count} 次右键）")
 
+        return saved_count
+
     except Exception as e:
         logger.warning(f"   - ⚠️ 浏览图片时出错: {e}")
+        return saved_count if 'saved_count' in locals() else 0
 
 
 def _compute_image_hash(image_bytes: bytes, hash_size: int = 8) -> Optional[int]:

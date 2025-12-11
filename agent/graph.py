@@ -15,6 +15,7 @@ def _route_after_collect(state: ClickGraphState) -> str:
 def _route_after_click(state: ClickGraphState) -> str:
     """
     点击后路由：
+    - 如果达到图片总数限制，立即结束
     - 如果还有坐标未点击，继续点击下一个
     - 如果当前轮次的坐标已全部点击完，检查是否需要进入下一轮
     - 如果所有轮次已完成，结束
@@ -23,6 +24,12 @@ def _route_after_click(state: ClickGraphState) -> str:
     idx = state.get("current_index", 0)
     current_round = state.get("current_round", 1)
     total_rounds = state.get("total_rounds", 1)
+
+    # 检查是否达到图片总数限制
+    max_images = state.get("max_images")
+    total_images = state.get("total_images", 0)
+    if max_images and total_images >= max_images:
+        return "done"  # 达到图片限制，结束任务
 
     # 如果还有坐标未点击，继续点击
     if idx < len(coords):
@@ -98,6 +105,7 @@ async def run_click_graph(
     browse_images_arrow_count: int = 5,
     content_description: str = "",
     output_dir: str = "",
+    max_images: int = None,
     recursion_limit: int = 100,
 ) -> ClickGraphState:
     """
@@ -107,10 +115,11 @@ async def run_click_graph(
         page: Playwright Page 对象
         max_notes: 每轮最多点击的笔记数量（默认20）
         total_rounds: 总共执行的轮次（默认1，设置>1可循环）
-    browse_images_arrow_count: 进入详情页后按右键浏览图片的次数（默认5）
-    content_description: 内容描述，用于过滤笔记（让 LLM 只选择符合描述的笔记）
-    output_dir: 输出目录路径，用于保存截图
-    recursion_limit: LangGraph 递归上限（默认100，避免多轮循环时达到25的默认限制）
+        browse_images_arrow_count: 进入详情页后按右键浏览图片的次数（默认5）
+        content_description: 内容描述，用于过滤笔记（让 LLM 只选择符合描述的笔记）
+        output_dir: 输出目录路径，用于保存截图
+        max_images: 图片总数限制，达到后自动结束任务（None=不限制）
+        recursion_limit: LangGraph 递归上限（默认100，避免多轮循环时达到25的默认限制）
     """
     app = create_click_graph()
     initial_state: ClickGraphState = {
@@ -120,6 +129,8 @@ async def run_click_graph(
         "browse_images_arrow_count": browse_images_arrow_count,
         "content_description": content_description,
         "output_dir": output_dir,
+        "max_images": max_images,
+        "total_images": 0,
         "coordinates": [],
         "current_index": 0,
         "clicked": [],

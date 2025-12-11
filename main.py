@@ -49,7 +49,8 @@ async def run_single_mission(
     mission_config: Dict[str, str],
     max_notes: int = 20,
     total_rounds: int = 10,
-    browse_images_count: int = 20
+    browse_images_count: int = 20,
+    max_images: int = None
 ) -> Dict:
     """
     执行单个关键词的采集任务（独立浏览器实例）
@@ -60,6 +61,7 @@ async def run_single_mission(
         max_notes: 每轮最多点击的笔记数量
         total_rounds: 总共执行的轮次
         browse_images_count: 每个笔记进入详情页后按右键浏览图片的次数
+        max_images: 图片总数限制，达到后自动结束任务（None=不限制）
 
     Returns:
         任务执行结果摘要
@@ -95,7 +97,10 @@ async def run_single_mission(
                 "is_logged_in": False,
             }
 
-            logger.info(f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图")
+            config_msg = f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图"
+            if max_images:
+                config_msg += f" | 图片总数限制{max_images}张"
+            logger.info(config_msg)
 
             # 初始化浏览器
             updates = await init_browser_node(state)
@@ -123,6 +128,7 @@ async def run_single_mission(
                 browse_images_arrow_count=browse_images_count,
                 content_description=description,
                 output_dir=str(output_dir),
+                max_images=max_images,
             )
 
             # 统计结果
@@ -186,6 +192,7 @@ async def main(max_concurrent: int = 3):
     max_notes = 20
     total_rounds = 10
     browse_images_count = 20
+    max_images = 100  # 每个关键词的图片总数限制（设为 None 则不限制）
 
     try:
         # 启动所有任务
@@ -196,7 +203,8 @@ async def main(max_concurrent: int = 3):
                 mission_config=mission,
                 max_notes=max_notes,
                 total_rounds=total_rounds,
-                browse_images_count=browse_images_count
+                browse_images_count=browse_images_count,
+                max_images=max_images
             )
             for mission in MISSIONS
         ]

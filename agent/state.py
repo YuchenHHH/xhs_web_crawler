@@ -52,6 +52,8 @@ class ClickGraphState(TypedDict):
     browse_images_arrow_count: int  # 进入详情页后按右键浏览图片的次数（默认5）
     content_description: str  # 内容描述，用于过滤笔记（让 LLM 只选择符合描述的笔记）
     output_dir: str  # 输出目录路径，用于保存截图
+    max_images: Optional[int]  # 图片总数限制（None=不限制）
+    total_images: int  # 已采集的图片总数
     coordinates: List[Dict]  # 识别到的坐标列表
     current_index: int  # 当前处理的坐标索引
     clicked: List[Dict]  # 成功点击的记录
