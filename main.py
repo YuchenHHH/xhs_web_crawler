@@ -14,9 +14,6 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
-    print(f"✅ 已加载环境变量: {env_path}")
-else:
-    print(f"⚠️  未找到 .env 文件: {env_path}")
 
 # 将项目根目录添加到 Python 路径
 sys.path.insert(0, str(Path(__file__).parent))
@@ -28,6 +25,11 @@ from agent.nodes import (
     check_login_node,
     search_keyword_node,
 )
+from utils.logger import get_logger
+
+# 初始化日志器
+logger = get_logger()
+logger.info(f"✅ 已加载环境变量: {env_path}" if env_path.exists() else f"⚠️  未找到 .env 文件: {env_path}")
 
 
 # ============================================
@@ -70,13 +72,13 @@ async def run_single_mission(
         browser_manager = BrowserManager()
 
         try:
-            print(f"\n[{keyword}] 🚀 任务启动")
+            logger.info(f"\n[{keyword}] 🚀 任务启动")
 
             # 创建输出目录
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_dir = Path(__file__).parent / "output" / f"{keyword}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
-            print(f"[{keyword}] 📁 输出目录: {output_dir}")
+            logger.info(f"[{keyword}] 📁 输出目录: {output_dir}")
 
             state = {
                 "browser_manager": browser_manager,
@@ -93,7 +95,7 @@ async def run_single_mission(
                 "is_logged_in": False,
             }
 
-            print(f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图")
+            logger.info(f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图")
 
             # 初始化浏览器
             updates = await init_browser_node(state)
@@ -104,7 +106,7 @@ async def run_single_mission(
             state.update(updates)
 
             if not state.get("is_logged_in"):
-                print(f"[{keyword}] ⚠️  未登录，跳过手动登录（使用共享 Cookie）")
+                logger.warning(f"[{keyword}] ⚠️  未登录，跳过手动登录（使用共享 Cookie）")
                 # 注意：如果需要手动登录，多任务并发时需要协调处理
                 # 这里假设已经有 auth.json，否则第一个任务会触发登录
 
@@ -113,7 +115,7 @@ async def run_single_mission(
             state.update(updates)
 
             # 执行点击任务
-            print(f"[{keyword}] 🎯 开始执行点击任务...")
+            logger.info(f"[{keyword}] 🎯 开始执行点击任务...")
             click_result = await run_click_graph(
                 page=state["page"],
                 max_notes=max_notes,
@@ -138,23 +140,23 @@ async def run_single_mission(
                 "output_dir": str(output_dir),
             }
 
-            print(f"\n[{keyword}] ✅ 任务完成 - 点击{result_summary['total_clicked']}个 | 进入详情页{entered_count}个")
+            logger.info(f"\n[{keyword}] ✅ 任务完成 - 点击{result_summary['total_clicked']}个 | 进入详情页{entered_count}个")
 
             return result_summary
 
         except KeyboardInterrupt:
-            print(f"\n[{keyword}] ⚠️  任务被用户中断")
+            logger.warning(f"\n[{keyword}] ⚠️  任务被用户中断")
             return {"keyword": keyword, "status": "interrupted", "error": "用户中断"}
 
         except Exception as e:
-            print(f"\n[{keyword}] ❌ 任务异常: {e}")
+            logger.error(f"\n[{keyword}] ❌ 任务异常: {e}")
             import traceback
             traceback.print_exc()
             return {"keyword": keyword, "status": "failed", "error": str(e)}
 
         finally:
             # 清理资源
-            print(f"[{keyword}] 🧹 清理浏览器资源...")
+            logger.info(f"[{keyword}] 🧹 清理浏览器资源...")
             await browser_manager.close()
 
 
@@ -165,17 +167,17 @@ async def main(max_concurrent: int = 3):
     Args:
         max_concurrent: 最大并发任务数（默认3个）
     """
-    print("\n" + "="*60)
-    print("🤖 小红书爬虫 Agent 启动（并发模式）")
-    print("="*60 + "\n")
+    logger.info("\n" + "="*60)
+    logger.info("🤖 小红书爬虫 Agent 启动（并发模式）")
+    logger.info("="*60 + "\n")
 
-    print(f"📋 任务列表: 共 {len(MISSIONS)} 个关键词")
+    logger.info(f"📋 任务列表: 共 {len(MISSIONS)} 个关键词")
     for i, mission in enumerate(MISSIONS, 1):
-        print(f"   {i}. {mission['keyword']} - {mission['description']}")
+        logger.info(f"   {i}. {mission['keyword']} - {mission['description']}")
 
-    print(f"\n⚙️  并发配置: 最大并发数 = {max_concurrent}")
-    print(f"⚙️  Cookie 文件: {'✅ 存在' if Path('auth.json').exists() else '❌ 不存在（第一个任务将触发登录）'}")
-    print()
+    logger.info(f"\n⚙️  并发配置: 最大并发数 = {max_concurrent}")
+    logger.info(f"⚙️  Cookie 文件: {'✅ 存在' if Path('auth.json').exists() else '❌ 不存在（第一个任务将触发登录）'}")
+    logger.info("")
 
     # 创建信号量控制并发数
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -204,41 +206,41 @@ async def main(max_concurrent: int = 3):
         end_time = datetime.now()
 
         # 打印汇总结果
-        print("\n" + "="*60)
-        print("📊 所有任务执行完毕 - 汇总报告")
-        print("="*60)
-        print(f"⏱️  总耗时: {(end_time - start_time).total_seconds():.1f} 秒")
-        print()
+        logger.info("\n" + "="*60)
+        logger.info("📊 所有任务执行完毕 - 汇总报告")
+        logger.info("="*60)
+        logger.info(f"⏱️  总耗时: {(end_time - start_time).total_seconds():.1f} 秒")
+        logger.info("")
 
         success_count = 0
         failed_count = 0
 
         for result in results:
             if isinstance(result, Exception):
-                print(f"❌ 任务异常: {result}")
+                logger.error(f"❌ 任务异常: {result}")
                 failed_count += 1
             elif isinstance(result, dict):
                 status = result.get('status', 'unknown')
                 keyword = result.get('keyword', 'N/A')
 
                 if status == 'success':
-                    print(f"✅ [{keyword}] 成功 - 点击{result.get('total_clicked', 0)}个 | 详情页{result.get('entered_detail', 0)}个")
+                    logger.info(f"✅ [{keyword}] 成功 - 点击{result.get('total_clicked', 0)}个 | 详情页{result.get('entered_detail', 0)}个")
                     success_count += 1
                 elif status == 'interrupted':
-                    print(f"⚠️  [{keyword}] 中断")
+                    logger.warning(f"⚠️  [{keyword}] 中断")
                     failed_count += 1
                 else:
-                    print(f"❌ [{keyword}] 失败 - {result.get('error', 'Unknown error')}")
+                    logger.error(f"❌ [{keyword}] 失败 - {result.get('error', 'Unknown error')}")
                     failed_count += 1
 
-        print()
-        print(f"📈 成功: {success_count}/{len(MISSIONS)} | 失败: {failed_count}/{len(MISSIONS)}")
-        print("="*60 + "\n")
+        logger.info("")
+        logger.info(f"📈 成功: {success_count}/{len(MISSIONS)} | 失败: {failed_count}/{len(MISSIONS)}")
+        logger.info("="*60 + "\n")
 
     except KeyboardInterrupt:
-        print("\n⚠️  用户中断程序（所有任务将尝试优雅退出）")
+        logger.warning("\n⚠️  用户中断程序（所有任务将尝试优雅退出）")
     except Exception as e:
-        print(f"\n❌ 主程序异常: {e}")
+        logger.error(f"\n❌ 主程序异常: {e}")
         import traceback
         traceback.print_exc()
 

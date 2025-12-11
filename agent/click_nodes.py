@@ -14,6 +14,9 @@ from core.click_verifier import ClickVerifier
 from core.som_vision_locator import SoMVisionLocator  # 使用 SoM 方案
 from config.settings import XHS_NOTE_DETAIL_SELECTORS
 from PIL import Image
+from utils.logger import get_logger
+
+logger = get_logger()
 
 
 async def collect_coordinates_node(state: ClickGraphState) -> Dict:
@@ -33,7 +36,7 @@ async def collect_coordinates_node(state: ClickGraphState) -> Dict:
     )
 
     if not elements:
-        print("⚠️  未识别到可点击的笔记元素")
+        logger.warning("⚠️  未识别到可点击的笔记元素")
         return {
             "coordinates": [],
             "current_index": 0,
@@ -41,11 +44,11 @@ async def collect_coordinates_node(state: ClickGraphState) -> Dict:
             "step": "no_elements_found",
         }
 
-    print(f"✅ 识别到 {len(elements)} 个笔记元素")
+    logger.info(f"✅ 识别到 {len(elements)} 个笔记元素")
     for i, elem in enumerate(elements[:3]):
         marker_id = elem.get("marker_id", "?")
         click_pos = f"({elem.get('click_x')}, {elem.get('click_y')})"
-        print(f"   {i + 1}. 标记ID={marker_id} 位置={click_pos}")
+        logger.info(f"   {i + 1}. 标记ID={marker_id} 位置={click_pos}")
 
     return {
         "coordinates": elements,
@@ -78,22 +81,22 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
     click_x = int(elem_data.get("click_x", 0))
     click_y = int(elem_data.get("click_y", 0))
 
-    print(f"\n🎯 点击第 {idx + 1}/{len(coords)} 个元素: 标记ID={marker_id}")
+    logger.info(f"\n🎯 点击第 {idx + 1}/{len(coords)} 个元素: 标记ID={marker_id}")
 
     try:
         before_url = page.url
 
         # 使用 ElementHandle 直接点击（100% 准确）
         if element:
-            print("   - 📌 使用 SoM ElementHandle 直接点击")
+            logger.info("   - 📌 使用 SoM ElementHandle 直接点击")
             await element.click()
-            print("   - ✅ 已执行元素点击（SoM 方案）")
+            logger.info("   - ✅ 已执行元素点击（SoM 方案）")
         else:
             # 降级方案：使用坐标点击
-            print(f"   - ⚠️ 元素不可用，降级为坐标点击 ({click_x}, {click_y})")
+            logger.warning(f"   - ⚠️ 元素不可用，降级为坐标点击 ({click_x}, {click_y})")
             await _show_click_marker(page, click_x, click_y)
             await _human_like_click(page, click_x, click_y)
-            print("   - ✅ 已执行坐标点击（降级方案）")
+            logger.info("   - ✅ 已执行坐标点击（降级方案）")
 
         # 等待页面响应
         await asyncio.sleep(0.2)
@@ -101,7 +104,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
 
         # 如果成功进入详情页，按右键浏览图片
         if entered_detail.get("entered", False):
-            print(f"   - 📸 进入详情页，开始浏览图片")
+            logger.info(f"   - 📸 进入详情页，开始浏览图片")
             # 生成笔记ID（用于文件夹命名）
             note_id = f"round{current_round}_note{idx+1}_marker{marker_id}"
             await _browse_images_with_arrow_keys(
@@ -140,7 +143,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
         }
 
     except Exception as e:
-        print(f"   - ❌ 点击失败: {e}")
+        logger.error(f"   - ❌ 点击失败: {e}")
         failures.append(
             {
                 "index": idx,
@@ -265,7 +268,7 @@ async def _browse_images_with_arrow_keys(
         if output_dir and note_id:
             note_dir = Path(output_dir) / note_id
             note_dir.mkdir(parents=True, exist_ok=True)
-            print(f"   - 📁 创建图片保存目录: {note_dir}")
+            logger.info(f"   - 📁 创建图片保存目录: {note_dir}")
 
         # 初始截图（第一张图）
         prev_screenshot = await page.screenshot(type="png")
@@ -275,7 +278,7 @@ async def _browse_images_with_arrow_keys(
         if note_dir:
             screenshot_path = note_dir / "image_001.png"
             screenshot_path.write_bytes(prev_screenshot)
-            print(f"   - 💾 保存: {screenshot_path.name}")
+            logger.info(f"   - 💾 保存: {screenshot_path.name}")
 
         actual_browsed = 1  # 实际浏览的图片数（包含首张）
 
@@ -294,25 +297,25 @@ async def _browse_images_with_arrow_keys(
             if note_dir:
                 screenshot_path = note_dir / f"image_{str(i + 2).zfill(3)}.png"
                 screenshot_path.write_bytes(current_screenshot)
-                print(f"   - 💾 保存: {screenshot_path.name}")
+                logger.info(f"   - 💾 保存: {screenshot_path.name}")
 
             # 对比截图是否相同或高度相似
             is_duplicate = False
             if current_screenshot == prev_screenshot:
-                print(f"   - 📸 检测到图片重复，已浏览完所有图片（共 {actual_browsed} 张）")
+                logger.info(f"   - 📸 检测到图片重复，已浏览完所有图片（共 {actual_browsed} 张）")
                 is_duplicate = True
             elif prev_hash and current_hash:
                 distance = _hamming_distance(prev_hash, current_hash)
                 # 阈值越小越严格；8 表示 8x8 dhash 允许少量像素差异
                 if distance <= 4:
-                    print(f"   - 📸 检测到图片高度相似（dhash 距离={distance}），结束浏览（共 {actual_browsed} 张）")
+                    logger.info(f"   - 📸 检测到图片高度相似（dhash 距离={distance}），结束浏览（共 {actual_browsed} 张）")
                     is_duplicate = True
 
             # 如果检测到重复，删除刚才保存的截图
             if is_duplicate:
                 if screenshot_path and screenshot_path.exists():
                     screenshot_path.unlink()
-                    print(f"   - 🗑️  删除重复截图: {screenshot_path.name}")
+                    logger.info(f"   - 🗑️  删除重复截图: {screenshot_path.name}")
                 break
 
             # 更新上一张截图
@@ -321,10 +324,10 @@ async def _browse_images_with_arrow_keys(
             actual_browsed += 1
         else:
             # 正常完成所有浏览
-            print(f"   - 📸 完成图片浏览（共按 {arrow_count} 次右键）")
+            logger.info(f"   - 📸 完成图片浏览（共按 {arrow_count} 次右键）")
 
     except Exception as e:
-        print(f"   - ⚠️ 浏览图片时出错: {e}")
+        logger.warning(f"   - ⚠️ 浏览图片时出错: {e}")
 
 
 def _compute_image_hash(image_bytes: bytes, hash_size: int = 8) -> Optional[int]:
@@ -366,9 +369,9 @@ async def scroll_and_wait_node(state: ClickGraphState) -> Dict:
     page: Page = state["page"]
     current_round = state.get("current_round", 1)
 
-    print("\n" + "="*60)
-    print(f"📍 第 {current_round} 轮完成，滚动加载更多内容")
-    print("="*60)
+    logger.info("\n" + "="*60)
+    logger.info(f"📍 第 {current_round} 轮完成，滚动加载更多内容")
+    logger.info("="*60)
 
     try:
         # 滚动页面
@@ -389,7 +392,7 @@ async def scroll_and_wait_node(state: ClickGraphState) -> Dict:
         # 等待内容加载
         await asyncio.sleep(2)
 
-        print("✅ 滚动完成，页面已加载新内容\n")
+        logger.info("✅ 滚动完成，页面已加载新内容\n")
 
         return {
             "step": "scrolled_for_next_round",
@@ -399,7 +402,7 @@ async def scroll_and_wait_node(state: ClickGraphState) -> Dict:
         }
 
     except Exception as e:
-        print(f"❌ 滚动失败: {e}\n")
+        logger.error(f"❌ 滚动失败: {e}\n")
         return {
             "step": "scroll_failed",
             "current_round": current_round + 1,
