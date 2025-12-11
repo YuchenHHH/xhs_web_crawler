@@ -101,7 +101,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
 
         # 如果成功进入详情页，按右键浏览图片
         if entered_detail.get("entered", False):
-            print(f"   - 📸 进入详情页，开始浏览图片（按{arrow_count}次右键）...")
+            print(f"   - 📸 进入详情页，开始浏览图片")
             # 生成笔记ID（用于文件夹命名）
             note_id = f"round{current_round}_note{idx+1}_marker{marker_id}"
             await _browse_images_with_arrow_keys(
@@ -290,21 +290,30 @@ async def _browse_images_with_arrow_keys(
             current_hash = _compute_image_hash(current_screenshot)
 
             # 保存截图（在检查重复之前保存）
+            screenshot_path = None
             if note_dir:
                 screenshot_path = note_dir / f"image_{str(i + 2).zfill(3)}.png"
                 screenshot_path.write_bytes(current_screenshot)
                 print(f"   - 💾 保存: {screenshot_path.name}")
 
             # 对比截图是否相同或高度相似
+            is_duplicate = False
             if current_screenshot == prev_screenshot:
                 print(f"   - 📸 检测到图片重复，已浏览完所有图片（共 {actual_browsed} 张）")
-                break
-            if prev_hash and current_hash:
+                is_duplicate = True
+            elif prev_hash and current_hash:
                 distance = _hamming_distance(prev_hash, current_hash)
                 # 阈值越小越严格；8 表示 8x8 dhash 允许少量像素差异
                 if distance <= 4:
                     print(f"   - 📸 检测到图片高度相似（dhash 距离={distance}），结束浏览（共 {actual_browsed} 张）")
-                    break
+                    is_duplicate = True
+
+            # 如果检测到重复，删除刚才保存的截图
+            if is_duplicate:
+                if screenshot_path and screenshot_path.exists():
+                    screenshot_path.unlink()
+                    print(f"   - 🗑️  删除重复截图: {screenshot_path.name}")
+                break
 
             # 更新上一张截图
             prev_screenshot = current_screenshot

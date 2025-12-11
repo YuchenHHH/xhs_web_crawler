@@ -1,11 +1,13 @@
 """
 小红书爬虫 Agent - 主入口
-运行整个自动化流程
+支持并发执行多个关键词采集任务
 """
 import asyncio
 import sys
+import argparse
 from pathlib import Path
 from datetime import datetime
+from typing import Dict
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -24,136 +26,239 @@ from agent.graph import run_click_graph
 from agent.nodes import (
     init_browser_node,
     check_login_node,
-    manual_login_and_save_cookies_node,
     search_keyword_node,
 )
 
 
-async def main():
+# ============================================
+# 任务配置列表
+# ============================================
+MISSIONS = [
+    {"keyword": "番茄炒蛋", "description": "挑选成品菜肴"},
+    {"keyword": "红烧肉", "description": "挑选色泽红亮的"},
+    {"keyword": "清蒸鱼", "description": "完整鱼身"},
+    {"keyword": "宫保鸡丁", "description": "挑选与菜肴相关的内容"},
+    {"keyword": "麻婆豆腐", "description": "挑选与菜肴相关的内容"},
+]
+
+
+async def run_single_mission(
+    semaphore: asyncio.Semaphore,
+    mission_config: Dict[str, str],
+    max_notes: int = 20,
+    total_rounds: int = 10,
+    browse_images_count: int = 20
+) -> Dict:
     """
-    主函数 - 运行完整的爬虫流程
+    执行单个关键词的采集任务（独立浏览器实例）
+
+    Args:
+        semaphore: 信号量，用于控制并发数
+        mission_config: 任务配置 {"keyword": "...", "description": "..."}
+        max_notes: 每轮最多点击的笔记数量
+        total_rounds: 总共执行的轮次
+        browse_images_count: 每个笔记进入详情页后按右键浏览图片的次数
+
+    Returns:
+        任务执行结果摘要
     """
-    print("\n" + "="*60)
-    print("🤖 小红书爬虫 Agent 启动")
-    print("="*60 + "\n")
+    keyword = mission_config["keyword"]
+    description = mission_config["description"]
 
-    # === 1. 初始化 BrowserManager ===
-    browser_manager = BrowserManager()
+    async with semaphore:
+        # 初始化独立的 BrowserManager
+        browser_manager = BrowserManager()
 
-    try:
-        keyword = "番茄炒蛋"  # 可以修改为任意关键词
-        description = "挑选其中 与菜肴相关的内容"  # 内容描述，用于过滤笔记
-        max_notes = 20  # 每轮最多点击的笔记数量
-        total_rounds = 10  # 总共执行的轮次（1=不循环，>1=滚动并重复）
-        browse_images_count = 20  # 每个笔记进入详情页后按右键浏览图片的次数
+        try:
+            print(f"\n[{keyword}] 🚀 任务启动")
 
-        # 创建输出目录
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(__file__).parent / "output" / f"{keyword}_{timestamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        print(f"📁 输出目录: {output_dir}")
+            # 创建输出目录
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = Path(__file__).parent / "output" / f"{keyword}_{timestamp}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            print(f"[{keyword}] 📁 输出目录: {output_dir}")
 
-        state = {
-            "browser_manager": browser_manager,
-            "page": None,
-            "search_keyword": keyword,
-            "search_description": description,
-            "max_notes_to_process": max_notes,
-            "current_note_index": 0,
-            "note_links": [],
-            "processed_notes": [],
-            "failed_notes": [],
-            "output_base_dir": str(output_dir),
-            "step": "not_started",
-            "is_logged_in": False,
-        }
+            state = {
+                "browser_manager": browser_manager,
+                "page": None,
+                "search_keyword": keyword,
+                "search_description": description,
+                "max_notes_to_process": max_notes,
+                "current_note_index": 0,
+                "note_links": [],
+                "processed_notes": [],
+                "failed_notes": [],
+                "output_base_dir": str(output_dir),
+                "step": "not_started",
+                "is_logged_in": False,
+            }
 
-        print("📋 初始配置:")
-        print(f"   - 搜索关键词: {keyword}")
-        print(f"   - 内容描述: {description}")
-        print(f"   - 每轮点击数: {max_notes}")
-        print(f"   - 执行轮次: {total_rounds}")
-        print(f"   - 图片浏览次数: 每个笔记按{browse_images_count}次右键")
-        print(f"   - Cookie 文件: {'存在' if Path('auth.json').exists() else '不存在'}")
-        print()
+            print(f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图")
 
-        # === 2. 顺序化流程（减少 LangGraph 上下文） ===
-        updates = await init_browser_node(state)
-        state.update(updates)
-
-        updates = await check_login_node(state)
-        state.update(updates)
-
-        if not state.get("is_logged_in"):
-            updates = await manual_login_and_save_cookies_node(state)
+            # 初始化浏览器
+            updates = await init_browser_node(state)
             state.update(updates)
 
-        updates = await search_keyword_node(state)
-        state.update(updates)
+            # 检查登录状态
+            updates = await check_login_node(state)
+            state.update(updates)
 
-        # === 3. 将"截图+坐标+点击+循环"交给精简版 LangGraph ===
-        click_result = await run_click_graph(
-            page=state["page"],
-            max_notes=state.get("max_notes_to_process", max_notes),
-            total_rounds=total_rounds,  # 传入轮次参数
-            browse_images_arrow_count=browse_images_count,  # 传入浏览图片次数
-            content_description=state.get("search_description", ""),  # 传入内容描述
-            output_dir=str(output_dir),  # 传入输出目录
-        )
+            if not state.get("is_logged_in"):
+                print(f"[{keyword}] ⚠️  未登录，跳过手动登录（使用共享 Cookie）")
+                # 注意：如果需要手动登录，多任务并发时需要协调处理
+                # 这里假设已经有 auth.json，否则第一个任务会触发登录
 
+            # 搜索关键词
+            updates = await search_keyword_node(state)
+            state.update(updates)
+
+            # 执行点击任务
+            print(f"[{keyword}] 🎯 开始执行点击任务...")
+            click_result = await run_click_graph(
+                page=state["page"],
+                max_notes=max_notes,
+                total_rounds=total_rounds,
+                browse_images_arrow_count=browse_images_count,
+                content_description=description,
+                output_dir=str(output_dir),
+            )
+
+            # 统计结果
+            entered_count = len(
+                [c for c in click_result.get("clicked", []) if c.get("entered_detail")]
+            )
+
+            result_summary = {
+                "keyword": keyword,
+                "status": "success",
+                "rounds": click_result.get('current_round', 1) - 1,
+                "total_clicked": len(click_result.get('clicked', [])),
+                "total_failed": len(click_result.get('failures', [])),
+                "entered_detail": entered_count,
+                "output_dir": str(output_dir),
+            }
+
+            print(f"\n[{keyword}] ✅ 任务完成 - 点击{result_summary['total_clicked']}个 | 进入详情页{entered_count}个")
+
+            return result_summary
+
+        except KeyboardInterrupt:
+            print(f"\n[{keyword}] ⚠️  任务被用户中断")
+            return {"keyword": keyword, "status": "interrupted", "error": "用户中断"}
+
+        except Exception as e:
+            print(f"\n[{keyword}] ❌ 任务异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"keyword": keyword, "status": "failed", "error": str(e)}
+
+        finally:
+            # 清理资源
+            print(f"[{keyword}] 🧹 清理浏览器资源...")
+            await browser_manager.close()
+
+
+async def main(max_concurrent: int = 3):
+    """
+    并发执行多个采集任务
+
+    Args:
+        max_concurrent: 最大并发任务数（默认3个）
+    """
+    print("\n" + "="*60)
+    print("🤖 小红书爬虫 Agent 启动（并发模式）")
+    print("="*60 + "\n")
+
+    print(f"📋 任务列表: 共 {len(MISSIONS)} 个关键词")
+    for i, mission in enumerate(MISSIONS, 1):
+        print(f"   {i}. {mission['keyword']} - {mission['description']}")
+
+    print(f"\n⚙️  并发配置: 最大并发数 = {max_concurrent}")
+    print(f"⚙️  Cookie 文件: {'✅ 存在' if Path('auth.json').exists() else '❌ 不存在（第一个任务将触发登录）'}")
+    print()
+
+    # 创建信号量控制并发数
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    # 任务参数（可根据需要调整）
+    max_notes = 20
+    total_rounds = 10
+    browse_images_count = 20
+
+    try:
+        # 启动所有任务
+        start_time = datetime.now()
+        tasks = [
+            run_single_mission(
+                semaphore=semaphore,
+                mission_config=mission,
+                max_notes=max_notes,
+                total_rounds=total_rounds,
+                browse_images_count=browse_images_count
+            )
+            for mission in MISSIONS
+        ]
+
+        # 等待所有任务完成
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        end_time = datetime.now()
+
+        # 打印汇总结果
         print("\n" + "="*60)
-        print("📊 点击结果")
+        print("📊 所有任务执行完毕 - 汇总报告")
         print("="*60)
-        print(f"   - 执行轮次: {click_result.get('current_round', 1) - 1}/{total_rounds}")
-        print(f"   - 累计识别坐标: {len(click_result.get('coordinates', []))}")
-        print(f"   - 累计点击: {len(click_result.get('clicked', []))}")
-        print(f"   - 累计失败: {len(click_result.get('failures', []))}")
-        entered_count = len(
-            [c for c in click_result.get("clicked", []) if c.get("entered_detail")]
-        )
-        print(f"   - 可能进入详情页: {entered_count}")
+        print(f"⏱️  总耗时: {(end_time - start_time).total_seconds():.1f} 秒")
+        print()
 
-        if click_result.get("clicked"):
-            print("\n✅ 已点击的坐标(前 3 条):")
-            for entry in click_result["clicked"][:3]:
-                print(
-                    f"   {entry['index'] + 1}. ({entry['click_x']}, {entry['click_y']}) - {entry.get('title', 'N/A')[:40]}"
-                )
+        success_count = 0
+        failed_count = 0
 
-        if click_result.get("failures"):
-            print("\n⚠️  点击失败的坐标:")
-            for entry in click_result["failures"]:
-                print(
-                    f"   {entry['index'] + 1}. ({entry['click_x']}, {entry['click_y']}) - {entry.get('error', '')}"
-                )
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"❌ 任务异常: {result}")
+                failed_count += 1
+            elif isinstance(result, dict):
+                status = result.get('status', 'unknown')
+                keyword = result.get('keyword', 'N/A')
 
-        # === 4. 保持浏览器打开一段时间供观察 ===
-        print("\n⏳ 保持浏览器打开 10 秒供观察...")
-        await asyncio.sleep(10)
+                if status == 'success':
+                    print(f"✅ [{keyword}] 成功 - 点击{result.get('total_clicked', 0)}个 | 详情页{result.get('entered_detail', 0)}个")
+                    success_count += 1
+                elif status == 'interrupted':
+                    print(f"⚠️  [{keyword}] 中断")
+                    failed_count += 1
+                else:
+                    print(f"❌ [{keyword}] 失败 - {result.get('error', 'Unknown error')}")
+                    failed_count += 1
+
+        print()
+        print(f"📈 成功: {success_count}/{len(MISSIONS)} | 失败: {failed_count}/{len(MISSIONS)}")
+        print("="*60 + "\n")
 
     except KeyboardInterrupt:
-        print("\n⚠️  用户中断程序")
-
+        print("\n⚠️  用户中断程序（所有任务将尝试优雅退出）")
     except Exception as e:
-        print(f"\n❌ 程序异常: {e}")
+        print(f"\n❌ 主程序异常: {e}")
         import traceback
         traceback.print_exc()
-
-    finally:
-        # === 清理资源 ===
-        print("\n🧹 正在清理资源...")
-        await browser_manager.close()
-
-        print("\n" + "="*60)
-        print("✅ 程序执行完毕")
-        print("="*60 + "\n")
 
 
 def run():
     """
     便捷启动函数（同步包装）
+    支持命令行参数
     """
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="小红书爬虫 Agent - 并发采集模式")
+    parser.add_argument(
+        "--concurrent",
+        "-c",
+        type=int,
+        default=3,
+        help="最大并发任务数（默认3）"
+    )
+    args = parser.parse_args()
+
+    asyncio.run(main(max_concurrent=args.concurrent))
 
 
 if __name__ == "__main__":
