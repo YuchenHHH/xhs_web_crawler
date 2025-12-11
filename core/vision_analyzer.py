@@ -6,12 +6,13 @@ import os
 import json
 import base64
 import re
+import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional
 from playwright.async_api import Page
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
-from config.settings import OPENAI_MODEL, OPENAI_TEMPERATURE, OPENAI_MAX_TOKENS
+from config.settings import OPENAI_MODEL, OPENAI_TEMPERATURE, OPENAI_MAX_TOKENS, OPENAI_MAX_RETRIES, OPENAI_RETRY_DELAY
 
 # 加载 .env 文件
 # 优先从项目根目录加载，然后是当前目录
@@ -117,44 +118,60 @@ class VisionAnalyzer:
 
         prompt = custom_prompt or default_prompt
 
-        try:
-            # 调用 OpenAI Vision API
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}",
-                                    "detail": "high"  # 高清晰度分析
+        # 重试机制
+        last_error = None
+        for attempt in range(OPENAI_MAX_RETRIES):
+            try:
+                # 调用 OpenAI Vision API
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{base64_image}",
+                                        "detail": "high"  # 高清晰度分析
+                                    }
                                 }
-                            }
-                        ]
-                    }
-                ],
-                max_completion_tokens=OPENAI_MAX_TOKENS,
-                # 部分模型不支持自定义 temperature，使用默认值
-            )
+                            ]
+                        }
+                    ],
+                    max_completion_tokens=OPENAI_MAX_TOKENS,
+                    # 部分模型不支持自定义 temperature，使用默认值
+                )
 
-            # 提取 LLM 返回的文本
-            raw_response = response.choices[0].message.content
-            print(f"   - GPT-4o 返回: {len(raw_response)} 字符")
+                # 提取 LLM 返回的文本
+                raw_response = response.choices[0].message.content
 
-            # 清洗并解析 JSON
-            parsed_data = self._clean_and_parse_json(raw_response)
+                if not raw_response or raw_response.strip() == "":
+                    raise ValueError("GPT-4o 返回了空响应")
 
-            return parsed_data
+                print(f"   - GPT-4o 返回: {len(raw_response)} 字符")
 
-        except Exception as e:
-            print(f"❌ GPT-4o 分析失败: {e}")
-            raise
+                # 清洗并解析 JSON
+                parsed_data = self._clean_and_parse_json(raw_response)
+
+                # 成功返回
+                return parsed_data
+
+            except Exception as e:
+                last_error = e
+                if attempt < OPENAI_MAX_RETRIES - 1:
+                    print(f"⚠️  GPT-4o 分析失败（第 {attempt + 1}/{OPENAI_MAX_RETRIES} 次尝试）: {e}")
+                    print(f"   - {OPENAI_RETRY_DELAY}秒后重试...")
+                    await asyncio.sleep(OPENAI_RETRY_DELAY)
+                else:
+                    print(f"❌ GPT-4o 在 {OPENAI_MAX_RETRIES} 次尝试后仍然失败: {e}")
+
+        # 所有重试都失败
+        raise last_error
 
     def _clean_and_parse_json(self, raw_text: str) -> Dict:
         """

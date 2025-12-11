@@ -13,8 +13,8 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 
 # ========== 视口配置 ==========
 VIEWPORT = {
-    "width": 1280,
-    "height": 800
+    "width": 1440,
+    "height": 900
 }
 
 # ========== Cookie 配置 ==========
@@ -64,6 +64,8 @@ XHS_NOTE_DETAIL_SELECTORS = {
 OPENAI_MODEL = "gpt-4o"  # 使用的 OpenAI 模型名称
 OPENAI_TEMPERATURE = 0.2  # 模型温度，越低越稳定
 OPENAI_MAX_TOKENS = 2000  # 最大生成 token 数
+OPENAI_MAX_RETRIES = 3  # GPT-4o 调用失败时的最大重试次数
+OPENAI_RETRY_DELAY = 2  # 重试之间的延迟时间（秒）
 
 # ========== 日志配置 ==========
 LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR

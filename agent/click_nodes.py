@@ -302,7 +302,7 @@ async def _browse_images_with_arrow_keys(
             if prev_hash and current_hash:
                 distance = _hamming_distance(prev_hash, current_hash)
                 # 阈值越小越严格；8 表示 8x8 dhash 允许少量像素差异
-                if distance <= 8:
+                if distance <= 4:
                     print(f"   - 📸 检测到图片高度相似（dhash 距离={distance}），结束浏览（共 {actual_browsed} 张）")
                     break
 

@@ -10,7 +10,7 @@ from typing import List, Dict, Optional
 from playwright.async_api import Page
 from openai import AsyncOpenAI
 
-from config.settings import OPENAI_MODEL, OPENAI_MAX_TOKENS
+from config.settings import OPENAI_MODEL, OPENAI_MAX_TOKENS, OPENAI_MAX_RETRIES, OPENAI_RETRY_DELAY
 from core.som_marker import SoMMarker
 
 
@@ -82,41 +82,68 @@ class SoMVisionLocator:
             # 4. 构建 Prompt（包含内容过滤）
             prompt = self._build_som_prompt(max_notes, len(element_map), content_description)
 
-            # 5. 调用 GPT-4o Vision
+            # 5. 调用 GPT-4o Vision（带重试机制）
             print("   - 正在调用 GPT-4o Vision 识别标记...")
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
+            marker_ids = []
+            for attempt in range(OPENAI_MAX_RETRIES):
+                try:
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
                             {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}",
-                                    "detail": "high"
-                                }
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": prompt
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{base64_image}",
+                                            "detail": "high"
+                                        }
+                                    }
+                                ]
                             }
-                        ]
-                    }
-                ],
-                response_format={"type": "json_object"},
-                max_completion_tokens=OPENAI_MAX_TOKENS,
-            )
+                        ],
+                        response_format={"type": "json_object"},
+                        max_completion_tokens=OPENAI_MAX_TOKENS,
+                    )
 
-            # 6. 解析响应
-            result_text = response.choices[0].message.content or ""
-            marker_ids = self._parse_marker_ids(result_text)
+                    # 6. 解析响应
+                    result_text = response.choices[0].message.content or ""
 
-            print(f"✅ GPT-4o 识别到 {len(marker_ids)} 个标记: {marker_ids}")
+                    if not result_text or result_text.strip() == "":
+                        raise ValueError("GPT-4o 返回了空响应")
+
+                    marker_ids = self._parse_marker_ids(result_text)
+
+                    if marker_ids:
+                        # 成功解析到标记，跳出重试循环
+                        print(f"✅ GPT-4o 识别到 {len(marker_ids)} 个标记: {marker_ids}")
+                        break
+                    else:
+                        # 解析失败，但可能是合法的空结果
+                        if attempt < OPENAI_MAX_RETRIES - 1:
+                            print(f"⚠️  GPT-4o 未识别到标记（第 {attempt + 1}/{OPENAI_MAX_RETRIES} 次尝试），{OPENAI_RETRY_DELAY}秒后重试...")
+                            await asyncio.sleep(OPENAI_RETRY_DELAY)
+                        else:
+                            print(f"⚠️  GPT-4o 在 {OPENAI_MAX_RETRIES} 次尝试后仍未识别到标记")
+
+                except Exception as e:
+                    if attempt < OPENAI_MAX_RETRIES - 1:
+                        print(f"⚠️  GPT-4o 调用失败（第 {attempt + 1}/{OPENAI_MAX_RETRIES} 次尝试）: {e}")
+                        print(f"   - {OPENAI_RETRY_DELAY}秒后重试...")
+                        await asyncio.sleep(OPENAI_RETRY_DELAY)
+                    else:
+                        print(f"❌ GPT-4o 在 {OPENAI_MAX_RETRIES} 次尝试后仍然失败: {e}")
+                        raise
 
             # 7. 移除标记（保持页面整洁）
             await self.marker.remove_markers(page)
+            print("🧹 已清除 SoM 标记")
 
             # 8. 构建返回结果
             results = []
