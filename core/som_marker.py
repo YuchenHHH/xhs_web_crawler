@@ -12,15 +12,14 @@ class SoMMarker:
     在截图前给页面元素添加醒目的数字标记，让 LLM 直接返回数字 ID
     """
 
-    def __init__(self, selectors: Optional[List[str]] = None):
+    def __init__(self, selectors: List[str]):
         """
         初始化 SoM 标记注入器
 
         Args:
-            selectors: 目标元素的 CSS 选择器列表
+            selectors: 目标元素的 CSS 选择器列表（必需参数）
         """
-        from config.settings import XHS_NOTE_CARD_SELECTORS
-        self.selectors = selectors or XHS_NOTE_CARD_SELECTORS
+        self.selectors = selectors
         self.selector_str = ",".join(self.selectors)
         self.element_map: Dict[int, ElementHandle] = {}
 

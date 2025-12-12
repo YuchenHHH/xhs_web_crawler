@@ -25,51 +25,21 @@ AUTH_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__
 DEFAULT_TIMEOUT = 10000  # 默认超时时间（毫秒）
 NAVIGATION_TIMEOUT = 30000  # 页面导航超时时间（毫秒）
 
-# ========== 小红书相关配置 ==========
-XHS_HOME_URL = "https://www.xiaohongshu.com/explore"
-XHS_SEARCH_INPUT_SELECTORS = [
-    "input#search-input",
-    "[placeholder='搜索小红书']",
-    "input[type='text'].search-input"
-]
+# ========== 平台特定配置 (已迁移) ==========
+# 注意: 所有平台特定的选择器和 URL 已迁移到 core/crawler_strategy.py
+# 使用 XHSCrawlerStrategy, PinterestCrawlerStrategy 等策略类
+# 详见: core/crawler_strategy.py
 
-# ========== 笔记处理配置（新增）==========
+# ========== 笔记处理配置 ==========
 DEFAULT_MAX_NOTES = 5  # 默认处理的最大笔记数量
 OUTPUT_BASE_DIR = "output"  # 输出文件的基础目录
 NOTE_SCREENSHOT_FORMAT = "png"  # 截图格式
 NOTE_JSON_INDENT = 2  # JSON 文件缩进空格数
 
-# ========== 滚动收集配置（新增）==========
+# ========== 滚动收集配置 ==========
 SCROLL_PAUSE_TIME = 1.5  # 滚动后等待加载时间（秒）
 MAX_SCROLL_ATTEMPTS = 3  # 最大滚动尝试次数
 SCROLL_DISTANCE = 800  # 每次滚动距离（像素）
-
-# ========== 笔记卡片选择器（新增）==========
-XHS_NOTE_CARD_SELECTORS = [
-    "a[href*='/explore/']",  # 优先级 1: 所有包含 /explore/ 的链接
-    ".note-item",  # 优先级 2: 笔记项容器
-    "[class*='note-card']",  # 优先级 3: 包含 note-card 的类名
-    ".feeds-container > div > a",  # 优先级 4: feeds 容器下的链接
-]
-
-# ========== 笔记详情页选择器（新增）==========
-XHS_NOTE_DETAIL_SELECTORS = {
-    "title": ".note-title, .title, [class*='title']",
-    "author": ".author-name, .user-name, [class*='author']",
-    "content": ".note-content, .content-text, [class*='content']",
-    "likes": "[class*='like-count'], .like-wrapper",
-}
-
-# ========== 笔记详情页图片选择器 ==========
-# 按优先级排序，优先尝试更精确的选择器
-XHS_NOTE_IMAGE_SELECTORS = [
-    ".carousel img",  # 轮播图中的图片
-    ".note-slider img",  # 笔记轮播中的图片
-    "[class*='swiper'] img",  # Swiper 组件中的图片
-    ".note-detail img",  # 详情页中的图片
-    "img[src*='sns-img']",  # 小红书图片 CDN
-    ".note-content img",  # 内容区域的图片
-]
 
 # ========== OpenAI 模型配置 ==========
 OPENAI_MODEL = "gpt-4o"  # 使用的 OpenAI 模型名称

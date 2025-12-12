@@ -2,8 +2,12 @@
 Agent 状态定义
 定义在不同节点间传递的状态数据结构
 """
-from typing import TypedDict, Any, Optional, List, Dict
+from typing import TypedDict, Any, Optional, List, Dict, TYPE_CHECKING
 from playwright.async_api import Page
+
+# Avoid circular import while maintaining type hints
+if TYPE_CHECKING:
+    from core.crawler_strategy import CrawlerStrategy
 
 
 class AgentState(TypedDict):
@@ -14,6 +18,9 @@ class AgentState(TypedDict):
     # === 浏览器相关 ===
     browser_manager: Any  # BrowserManager 实例（避免循环导入，使用 Any）
     page: Optional[Page]  # Playwright Page 对象
+
+    # === 爬虫策略 ===
+    crawler: Any  # CrawlerStrategy 实例（运行时使用 XHSCrawlerStrategy 等）
 
     # === 业务数据 ===
     search_keyword: str  # 用户要搜索的关键词
@@ -47,6 +54,10 @@ class ClickGraphState(TypedDict):
     LangGraph 精简状态：仅负责截图、坐标输出与顺序点击
     """
     page: Page  # Playwright Page 对象
+
+    # === 爬虫策略 ===
+    crawler: Any  # CrawlerStrategy 实例（与 AgentState 保持一致）
+
     max_notes: int  # 最多点击的笔记数量
     press_escape_after_click: bool  # 是否在每次点击后按 ESC 返回
     browse_images_arrow_count: int  # 进入详情页后按右键浏览图片的次数（默认5）

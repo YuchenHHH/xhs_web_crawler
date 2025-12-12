@@ -4,7 +4,6 @@ Click verifier to ensure a coordinate is on a note card before clicking.
 import math
 from typing import Dict, List, Optional
 from playwright.async_api import Page
-from config.settings import XHS_NOTE_CARD_SELECTORS
 
 
 class ClickVerifier:
@@ -12,8 +11,14 @@ class ClickVerifier:
     Utilities to validate and adjust click coordinates so they land on note cards.
     """
 
-    def __init__(self, selectors: Optional[List[str]] = None):
-        self.selectors = selectors or XHS_NOTE_CARD_SELECTORS
+    def __init__(self, selectors: List[str]):
+        """
+        初始化点击验证器
+
+        Args:
+            selectors: 笔记卡片的 CSS 选择器列表（必需参数）
+        """
+        self.selectors = selectors
         self.selector_str = ",".join(self.selectors)
 
     async def validate(

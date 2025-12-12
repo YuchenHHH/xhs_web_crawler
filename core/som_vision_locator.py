@@ -20,12 +20,13 @@ class SoMVisionLocator:
     不再预测坐标，而是识别数字标记 ID
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, selectors: List[str], api_key: Optional[str] = None):
         """
         初始化 SoM Vision Locator
 
         Args:
-            api_key: OpenAI API Key
+            selectors: 笔记卡片的 CSS 选择器列表（必需参数）
+            api_key: OpenAI API Key（可选，默认从环境变量读取）
         """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
 
@@ -34,7 +35,7 @@ class SoMVisionLocator:
 
         self.client = AsyncOpenAI(api_key=self.api_key)
         self.model = OPENAI_MODEL
-        self.marker = SoMMarker()
+        self.marker = SoMMarker(selectors=selectors)
 
     async def locate_note_cards(
         self,

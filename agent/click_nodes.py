@@ -12,7 +12,6 @@ from playwright.async_api import Page
 from agent.state import ClickGraphState
 from core.click_verifier import ClickVerifier
 from core.som_vision_locator import SoMVisionLocator  # 使用 SoM 方案
-from config.settings import XHS_NOTE_DETAIL_SELECTORS
 from PIL import Image
 from utils.logger import get_logger
 
@@ -24,11 +23,12 @@ async def collect_coordinates_node(state: ClickGraphState) -> Dict:
     使用 SoM 方案识别笔记元素（注入标记 -> 截图 -> LLM识别ID）
     """
     page: Page = state["page"]
+    crawler = state["crawler"]
     max_notes = state.get("max_notes", 20)
     content_description = state.get("content_description", "")
 
     # 使用 SoM 方案定位元素
-    locator = SoMVisionLocator()
+    locator = SoMVisionLocator(selectors=crawler.note_card_selectors)
     elements = await locator.locate_note_cards(
         page=page,
         max_notes=max_notes,
@@ -63,6 +63,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
     对识别到的元素逐个点击（使用 SoM 方案的 ElementHandle）
     """
     page: Page = state["page"]
+    crawler = state["crawler"]
     coords = state.get("coordinates", [])
     idx = state.get("current_index", 0)
     clicked = state.get("clicked", [])
@@ -110,7 +111,11 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
 
         # 等待页面响应
         await asyncio.sleep(0.2)
-        entered_detail = await _verify_detail_entry(page, before_url=before_url)
+        entered_detail = await _verify_detail_entry(
+            page,
+            before_url=before_url,
+            note_detail_selectors=crawler.note_detail_selectors
+        )
 
         # 如果成功进入详情页，按右键浏览图片
         if entered_detail.get("entered", False):
@@ -221,12 +226,21 @@ async def _show_click_marker(page: Page, x: int, y: int):
     )
 
 
-async def _verify_detail_entry(page: Page, before_url: Optional[str] = None) -> Dict:
+async def _verify_detail_entry(
+    page: Page,
+    before_url: Optional[str] = None,
+    note_detail_selectors: Dict[str, str] = None
+) -> Dict:
     """
-    粗略检测是否进入详情页（URL 改变或详情选择器出现）。
+    粗略检测是否进入详情页（URL 改变或详情选择器出现）
+
+    Args:
+        page: Playwright Page
+        before_url: 点击前的 URL（可选）
+        note_detail_selectors: 详情页选择器（从 crawler strategy 传入）
     """
     detail_url_keywords = ["/explore/", "/discovery/item/"]
-    selectors = list(XHS_NOTE_DETAIL_SELECTORS.values())
+    selectors = list(note_detail_selectors.values()) if note_detail_selectors else []
     current_url = page.url
 
     if before_url and current_url != before_url and any(k in current_url for k in detail_url_keywords):

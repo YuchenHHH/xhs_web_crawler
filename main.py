@@ -19,6 +19,7 @@ if env_path.exists():
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.browser_manager import BrowserManager
+from core.crawler_strategy import XHSCrawlerStrategy
 from agent.graph import run_click_graph
 from agent.nodes import (
     init_browser_node,
@@ -73,6 +74,9 @@ async def run_single_mission(
         # 初始化独立的 BrowserManager
         browser_manager = BrowserManager()
 
+        # 初始化爬虫策略
+        crawler = XHSCrawlerStrategy()
+
         try:
             logger.info(f"\n[{keyword}] 🚀 任务启动")
 
@@ -84,6 +88,7 @@ async def run_single_mission(
 
             state = {
                 "browser_manager": browser_manager,
+                "crawler": crawler,
                 "page": None,
                 "search_keyword": keyword,
                 "search_description": description,
@@ -123,6 +128,7 @@ async def run_single_mission(
             logger.info(f"[{keyword}] 🎯 开始执行点击任务...")
             click_result = await run_click_graph(
                 page=state["page"],
+                crawler=crawler,
                 max_notes=max_notes,
                 total_rounds=total_rounds,
                 browse_images_arrow_count=browse_images_count,

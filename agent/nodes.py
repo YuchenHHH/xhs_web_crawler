@@ -4,16 +4,13 @@ Agent 节点函数
 """
 import asyncio
 import random
-from typing import Dict
+from typing import Dict, List
 from playwright.async_api import Page
 
 from agent.state import AgentState
 from config.settings import (
-    XHS_HOME_URL,
-    XHS_SEARCH_INPUT_SELECTORS,
     DEFAULT_TIMEOUT,
     SCROLL_PAUSE_TIME,
-    XHS_NOTE_CARD_SELECTORS,
 )
 from core.click_verifier import ClickVerifier
 
@@ -36,8 +33,10 @@ async def init_browser_node(state: AgentState) -> dict:
     page = await browser_manager.start()
 
     # 访问小红书首页
-    print(f"🌐 正在访问: {XHS_HOME_URL}")
-    await page.goto(XHS_HOME_URL, wait_until="domcontentloaded", timeout=30000)
+    crawler = state["crawler"]
+    home_url = crawler.home_url
+    print(f"🌐 正在访问: {home_url}")
+    await page.goto(home_url, wait_until="domcontentloaded", timeout=30000)
 
     # 等待页面稳定（模拟人类浏览行为）
     await asyncio.sleep(2)
@@ -69,7 +68,8 @@ async def check_login_node(state: AgentState) -> dict:
     print("="*60)
 
     page: Page = state["page"]
-    is_logged_in = await _detect_login_status(page)
+    crawler = state["crawler"]
+    is_logged_in = await crawler.detect_login_status(page)
 
     if is_logged_in:
         print("✅ 检测到用户信息，已登录")
@@ -96,6 +96,7 @@ async def manual_login_and_save_cookies_node(state: AgentState) -> dict:
 
     page: Page = state["page"]
     browser_manager = state["browser_manager"]
+    crawler = state["crawler"]
 
     print("💡 当前未登录，请在打开的浏览器中手动完成登录（扫码/密码均可）")
     print("   登录成功后，本节点会自动保存 Cookie，后续可免扫码。")
@@ -109,7 +110,7 @@ async def manual_login_and_save_cookies_node(state: AgentState) -> dict:
         print(f"   - 等待用户登录中... ({i + 1}/{max_checks})")
         await asyncio.sleep(wait_interval)
 
-        is_logged_in = await _detect_login_status(page)
+        is_logged_in = await crawler.detect_login_status(page)
         if is_logged_in:
             print("✅ 检测到已登录，正在保存 Cookie ...")
             await browser_manager.save_cookies()
@@ -146,6 +147,7 @@ async def search_keyword_node(state: AgentState) -> dict:
 
     page: Page = state["page"]
     keyword = state["search_keyword"]
+    crawler = state["crawler"]
 
     print(f"🔍 搜索关键词: {keyword}")
 
@@ -155,7 +157,7 @@ async def search_keyword_node(state: AgentState) -> dict:
 
         # 尝试多种选择器（优先级从高到低）
         search_input = None
-        for selector in XHS_SEARCH_INPUT_SELECTORS:
+        for selector in crawler.search_input_selectors:
             try:
                 locator = page.locator(selector).first
                 if await locator.is_visible(timeout=2000):
@@ -402,6 +404,7 @@ async def process_note_detail_node(state: AgentState) -> dict:
         更新后的状态字典
     """
     page: Page = state["page"]
+    crawler = state["crawler"]
     note_links = state.get("note_links", [])
     current_index = state.get("current_note_index", 0)
     output_dir = state.get("output_base_dir", "output")
@@ -451,7 +454,7 @@ async def process_note_detail_node(state: AgentState) -> dict:
             print("   - ⚠️  滚动后使用原坐标点击（可能有偏差）")
 
         # === 步骤 1.5: 坐标验证 ===
-        verifier = ClickVerifier()
+        verifier = ClickVerifier(selectors=crawler.note_card_selectors)
         verification = await verifier.validate(page, click_x, click_y, bounding_box)
 
         if not verification["is_valid"]:
@@ -468,7 +471,7 @@ async def process_note_detail_node(state: AgentState) -> dict:
             print(f"   - ✅ 坐标验证通过，使用 ({click_x}, {click_y}) 点击")
 
         # === 步骤 1.55: DOM 校准，将坐标吸附到最近卡片中心 ===
-        calibrated = await _calibrate_click_with_dom(page, click_x, click_y)
+        calibrated = await _calibrate_click_with_dom(page, click_x, click_y, crawler.note_card_selectors)
         if calibrated:
             dist = calibrated.get("distance", 0)
             new_x, new_y = calibrated["x"], calibrated["y"]
@@ -489,7 +492,7 @@ async def process_note_detail_node(state: AgentState) -> dict:
         await page.wait_for_load_state("domcontentloaded", timeout=15000)
 
         # 点击后校验是否真的进入了笔记详情页
-        verification = await _verify_detail_page_entry(page, before_click_url)
+        verification = await _verify_detail_page_entry(page, before_click_url, crawler.note_detail_selectors)
         entered_detail = verification.get("entered", False)
         if not entered_detail:
             reason = verification.get("reason", "unknown")
@@ -511,8 +514,7 @@ async def process_note_detail_node(state: AgentState) -> dict:
         print(f"   - ✅ 已进入详情页（{verification.get('via', 'detected via markers')}）")
 
         # 等待详情页内容加载
-        from config.settings import XHS_NOTE_DETAIL_SELECTORS
-        title_selector = XHS_NOTE_DETAIL_SELECTORS["title"]
+        title_selector = crawler.note_detail_selectors["title"]
 
         try:
             await page.locator(title_selector).first.wait_for(state="visible", timeout=10000)
@@ -784,25 +786,7 @@ async def download_images_node(state: AgentState) -> dict:
 
 
 # === 辅助函数 ===
-
-async def _detect_login_status(page: Page) -> bool:
-    """
-    统一的登录检测逻辑，供多个节点复用
-    """
-    try:
-        login_button = page.locator("text=登录").or_(page.locator("text=注册"))
-        if await login_button.is_visible(timeout=3000):
-            return False
-
-        user_avatar = page.locator(".user-avatar, .avatar, [class*='user']").first
-        if await user_avatar.is_visible(timeout=3000):
-            return True
-
-    except Exception as e:
-        print(f"⚠️  登录检测异常: {e}")
-
-    return False
-
+# 注意: _detect_login_status 函数已移至 core/crawler_strategy.py 中的 CrawlerStrategy.detect_login_status()
 
 async def scroll_right_modal(page: Page, duration: float = 1.0):
     """
@@ -910,20 +894,29 @@ async def _human_like_click(page: Page, x: int, y: int):
     await asyncio.sleep(random.uniform(0.05, 0.12))
 
 
-async def _verify_detail_page_entry(page: Page, before_url: str, timeout: int = 8000) -> Dict:
+async def _verify_detail_page_entry(
+    page: Page,
+    before_url: str,
+    note_detail_selectors: Dict[str, str],
+    timeout: int = 8000
+) -> Dict:
     """
-    判断是否从搜索页进入了笔记详情页。
+    判断是否从搜索页进入了笔记详情页
+
+    Args:
+        page: Playwright Page
+        before_url: 点击前的 URL
+        note_detail_selectors: 详情页选择器字典（从 crawler strategy 传入）
+        timeout: 超时时间（毫秒）
 
     URL 判断规则：
     - 详情页: https://www.xiaohongshu.com/explore/66c32e22000000001f01fd24?...
     - 搜索页(未变): https://www.xiaohongshu.com/search_result?keyword=...
     - 搜索页(相关搜索): https://www.xiaohongshu.com/search_result?keyword=...（keyword变了）
     """
-    from config.settings import XHS_NOTE_DETAIL_SELECTORS
-
     detail_url_keywords = ["/explore/", "/discovery/item/"]
     search_url_keywords = ["/search_result"]
-    selectors = list(XHS_NOTE_DETAIL_SELECTORS.values())
+    selectors = list(note_detail_selectors.values())
     deadline = asyncio.get_event_loop().time() + timeout / 1000
 
     while asyncio.get_event_loop().time() < deadline:
@@ -960,12 +953,18 @@ async def _verify_detail_page_entry(page: Page, before_url: str, timeout: int = 
     }
 
 
-async def _calibrate_click_with_dom(page: Page, x: int, y: int):
+async def _calibrate_click_with_dom(page: Page, x: int, y: int, note_card_selectors: List[str]):
     """
     根据 DOM 定位最近的 note 卡片中心点，用于纠偏 Vision 坐标
+
+    Args:
+        page: Playwright Page
+        x: 目标 x 坐标
+        y: 目标 y 坐标
+        note_card_selectors: 笔记卡片选择器列表（从 crawler strategy 传入）
     """
     try:
-        selector_str = ",".join(XHS_NOTE_CARD_SELECTORS)
+        selector_str = ",".join(note_card_selectors)
         excluded_words = ["相关搜索", "大家都在搜", "猜你想搜", "热门搜索"]
         nearest = await page.evaluate(
             """({ x, y, selectorStr, excludedWords }) => {

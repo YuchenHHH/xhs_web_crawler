@@ -100,6 +100,7 @@ def create_click_graph():
 
 async def run_click_graph(
     page,
+    crawler,
     max_notes: int = 20,
     total_rounds: int = 1,
     browse_images_arrow_count: int = 5,
@@ -113,6 +114,7 @@ async def run_click_graph(
 
     Args:
         page: Playwright Page 对象
+        crawler: CrawlerStrategy 实例（平台策略）
         max_notes: 每轮最多点击的笔记数量（默认20）
         total_rounds: 总共执行的轮次（默认1，设置>1可循环）
         browse_images_arrow_count: 进入详情页后按右键浏览图片的次数（默认5）
@@ -124,6 +126,7 @@ async def run_click_graph(
     app = create_click_graph()
     initial_state: ClickGraphState = {
         "page": page,
+        "crawler": crawler,
         "max_notes": max_notes,
         "press_escape_after_click": True,
         "browse_images_arrow_count": browse_images_arrow_count,
