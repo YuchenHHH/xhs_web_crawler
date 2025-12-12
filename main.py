@@ -192,7 +192,7 @@ async def main(max_concurrent: int = 3):
     max_notes = 20
     total_rounds = 10
     browse_images_count = 20
-    max_images = 100  # 每个关键词的图片总数限制（设为 None 则不限制）
+    max_images = 50  # 每个关键词的图片总数限制（设为 None 则不限制）
 
     try:
         # 启动所有任务

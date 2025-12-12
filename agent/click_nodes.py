@@ -75,13 +75,23 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
     if idx >= len(coords):
         return {"step": "all_clicked"}
 
+    # 在点击之前检查是否已达到图片总数限制
+    max_images = state.get("max_images")
+    total_images = state.get("total_images", 0)
+    if max_images and total_images >= max_images:
+        logger.info(f"\n🎯 已达到图片总数限制({max_images}张)，停止点击新笔记")
+        return {
+            "step": "image_limit_reached",
+            "current_index": len(coords)  # 设置为最大值，触发任务结束
+        }
+
     elem_data = coords[idx]
     marker_id = elem_data.get("marker_id", "?")
     element = elem_data.get("element")
     click_x = int(elem_data.get("click_x", 0))
     click_y = int(elem_data.get("click_y", 0))
 
-    logger.info(f"\n🎯 点击第 {idx + 1}/{len(coords)} 个元素: 标记ID={marker_id}")
+    logger.info(f"\n🎯 点击第 {idx + 1}/{len(coords)} 个元素: 标记ID={marker_id} (当前已收集{total_images}张图片)")
 
     try:
         before_url = page.url
@@ -128,7 +138,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
                 "note_id": elem_data.get("note_id", ""),
                 "title": elem_data.get("title", "N/A"),
                 "entered_detail": entered_detail.get("entered", False),
-                "click_method": "element" if element else "coordinate"
+                "click_method": "element" if element else "coordinate",
             }
         )
 
@@ -141,6 +151,8 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
             "current_index": idx + 1,
             "step": "clicked",
             "last_click_entered": entered_detail.get("entered", False),
+            # 需要把 total_images 显式返回给状态，否则全局图片上限判断会失效
+            "total_images": state.get("total_images", 0),
         }
 
     except Exception as e:
@@ -161,6 +173,7 @@ async def click_coordinate_node(state: ClickGraphState) -> Dict:
             "current_index": idx + 1,
             "step": "click_failed",
             "last_click_entered": False,
+            "total_images": state.get("total_images", 0),
         }
 
 
@@ -294,10 +307,11 @@ async def _browse_images_with_arrow_keys(
         if note_dir:
             screenshot_path = note_dir / "image_001.png"
             screenshot_path.write_bytes(prev_screenshot)
-            logger.info(f"   - 💾 保存: {screenshot_path.name}")
             saved_count = 1
             if state:
                 state["total_images"] = total_images + 1
+                total_images = state["total_images"]  # 更新局部变量
+            logger.info(f"   - 💾 保存: {screenshot_path.name} (图片总数: {total_images}/{max_images if max_images else '∞'})")
 
         actual_browsed = 1  # 实际浏览的图片数（包含首张）
 
@@ -323,10 +337,11 @@ async def _browse_images_with_arrow_keys(
             if note_dir:
                 screenshot_path = note_dir / f"image_{str(i + 2).zfill(3)}.png"
                 screenshot_path.write_bytes(current_screenshot)
-                logger.info(f"   - 💾 保存: {screenshot_path.name}")
                 saved_count += 1
                 if state:
                     state["total_images"] = state.get("total_images", 0) + 1
+                    total_images = state["total_images"]  # 更新局部变量
+                logger.info(f"   - 💾 保存: {screenshot_path.name} (图片总数: {total_images}/{max_images if max_images else '∞'})")
 
             # 对比截图是否相同或高度相似
             is_duplicate = False
@@ -344,10 +359,11 @@ async def _browse_images_with_arrow_keys(
             if is_duplicate:
                 if screenshot_path and screenshot_path.exists():
                     screenshot_path.unlink()
-                    logger.info(f"   - 🗑️  删除重复截图: {screenshot_path.name}")
                     saved_count -= 1
                     if state:
                         state["total_images"] = max(0, state.get("total_images", 0) - 1)
+                        total_images = state["total_images"]  # 更新局部变量
+                    logger.info(f"   - 🗑️  删除重复截图: {screenshot_path.name} (图片总数: {total_images}/{max_images if max_images else '∞'})")
                 break
 
             # 更新上一张截图
