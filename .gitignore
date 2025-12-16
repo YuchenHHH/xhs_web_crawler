@@ -41,6 +41,7 @@ ms-playwright/
 # Secrets & local state
 .env
 auth.json
+auth/
 cookies.json
 
 # Runtime output

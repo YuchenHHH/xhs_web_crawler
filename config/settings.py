@@ -25,10 +25,7 @@ AUTH_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__
 DEFAULT_TIMEOUT = 10000  # 默认超时时间（毫秒）
 NAVIGATION_TIMEOUT = 30000  # 页面导航超时时间（毫秒）
 
-# ========== 平台特定配置 (已迁移) ==========
-# 注意: 所有平台特定的选择器和 URL 已迁移到 core/crawler_strategy.py
-# 使用 XHSCrawlerStrategy, PinterestCrawlerStrategy 等策略类
-# 详见: core/crawler_strategy.py
+
 
 # ========== 笔记处理配置 ==========
 DEFAULT_MAX_NOTES = 5  # 默认处理的最大笔记数量
@@ -41,7 +38,7 @@ SCROLL_PAUSE_TIME = 1.5  # 滚动后等待加载时间（秒）
 MAX_SCROLL_ATTEMPTS = 3  # 最大滚动尝试次数
 SCROLL_DISTANCE = 800  # 每次滚动距离（像素）
 
-# ========== OpenAI 模型配置 ==========
+# ==========  模型配置 ==========
 OPENAI_MODEL = "gpt-4o"  # 使用的 OpenAI 模型名称
 OPENAI_TEMPERATURE = 0.2  # 模型温度，越低越稳定
 OPENAI_MAX_TOKENS = 2000  # 最大生成 token 数

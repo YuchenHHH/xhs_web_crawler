@@ -28,7 +28,10 @@ async def collect_coordinates_node(state: ClickGraphState) -> Dict:
     content_description = state.get("content_description", "")
 
     # 使用 SoM 方案定位元素
-    locator = SoMVisionLocator(selectors=crawler.note_card_selectors)
+    locator = SoMVisionLocator(
+        selectors=crawler.note_card_selectors,
+        platform_name=crawler.platform_name
+    )
     elements = await locator.locate_note_cards(
         page=page,
         max_notes=max_notes,
@@ -360,13 +363,12 @@ async def _browse_images_with_arrow_keys(
             # 对比截图是否相同或高度相似
             is_duplicate = False
             if current_screenshot == prev_screenshot:
-                logger.info(f"   - 📸 检测到图片重复，已浏览完所有图片（共 {actual_browsed} 张）")
+                logger.info(f"   - 📸 已浏览完所有图片（共 {actual_browsed} 张）")
                 is_duplicate = True
             elif prev_hash and current_hash:
                 distance = _hamming_distance(prev_hash, current_hash)
                 # 阈值越小越严格；8 表示 8x8 dhash 允许少量像素差异
                 if distance <= 4:
-                    logger.info(f"   - 📸 检测到图片高度相似（dhash 距离={distance}），结束浏览（共 {actual_browsed} 张）")
                     is_duplicate = True
 
             # 如果检测到重复，删除刚才保存的截图

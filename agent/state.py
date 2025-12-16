@@ -7,7 +7,7 @@ from playwright.async_api import Page
 
 # Avoid circular import while maintaining type hints
 if TYPE_CHECKING:
-    from core.crawler_strategy import CrawlerStrategy
+    from config.base_site import CrawlerStrategy
 
 
 class AgentState(TypedDict):

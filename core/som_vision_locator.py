@@ -20,12 +20,13 @@ class SoMVisionLocator:
     不再预测坐标，而是识别数字标记 ID
     """
 
-    def __init__(self, selectors: List[str], api_key: Optional[str] = None):
+    def __init__(self, selectors: List[str], platform_name: str = "xiaohongshu", api_key: Optional[str] = None):
         """
         初始化 SoM Vision Locator
 
         Args:
             selectors: 笔记卡片的 CSS 选择器列表（必需参数）
+            platform_name: 平台名称（xiaohongshu, pinterest等），用于选择合适的prompt
             api_key: OpenAI API Key（可选，默认从环境变量读取）
         """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -35,6 +36,7 @@ class SoMVisionLocator:
 
         self.client = AsyncOpenAI(api_key=self.api_key)
         self.model = OPENAI_MODEL
+        self.platform_name = platform_name
         self.marker = SoMMarker(selectors=selectors)
 
     async def locate_note_cards(
@@ -83,8 +85,8 @@ class SoMVisionLocator:
             # 4. 构建 Prompt（包含内容过滤）
             prompt = self._build_som_prompt(max_notes, len(element_map), content_description)
 
-            # 5. 调用 GPT-4o Vision（带重试机制）
-            print("   - 正在调用 GPT-4o Vision 识别标记...")
+            # 5. 调用 Vision
+            print("   - 正在识别标记...")
 
             marker_ids = []
             for attempt in range(OPENAI_MAX_RETRIES):
@@ -193,7 +195,24 @@ class SoMVisionLocator:
 
     def _build_som_prompt(self, max_notes: int, total_marks: int, content_description: str = "") -> str:
         """
-        构建 SoM 方案的 Prompt
+        构建平台特定的 SoM 方案 Prompt
+
+        Args:
+            max_notes: 请求的最大笔记数
+            total_marks: 实际标记的数量
+            content_description: 内容描述，用于过滤笔记
+
+        Returns:
+            Prompt 字符串
+        """
+        if self.platform_name == "pinterest":
+            return self._build_pinterest_prompt(max_notes, total_marks, content_description)
+        else:
+            return self._build_xhs_prompt(max_notes, total_marks, content_description)
+
+    def _build_xhs_prompt(self, max_notes: int, total_marks: int, content_description: str = "") -> str:
+        """
+        构建小红书平台的 SoM Prompt
 
         Args:
             max_notes: 请求的最大笔记数
@@ -301,6 +320,89 @@ class SoMVisionLocator:
         prompt += """
 """
         return prompt
+
+    def _build_pinterest_prompt(self, max_notes: int, total_marks: int, content_description: str = "") -> str:
+        """
+        构建 Pinterest 平台的 SoM Prompt（针对瀑布流布局优化）
+
+        Args:
+            max_notes: 请求的最大笔记数
+            total_marks: 实际标记的数量
+            content_description: 内容描述，用于过滤笔记
+
+        Returns:
+            Prompt 字符串
+        """
+        base_prompt = f"""You are analyzing a Pinterest page screenshot with golden circular number markers (1, 2, 3...) on pins.
+
+🎯 **Page Layout**: Pinterest uses a **masonry (waterfall) layout** with irregular column widths.
+
+📋 **Your Task**:
+"""
+
+        # Add content filtering if provided
+        if content_description:
+            base_prompt += f"""
+Select ONLY pins that match this description:
+**"{content_description}"**
+
+Analyze each marked pin's image and text to verify it matches. Skip pins that don't match.
+"""
+        else:
+            base_prompt += """
+Select the most visually appealing and relevant pins from the marked items.
+"""
+
+        base_prompt += f"""
+
+⚠️ **CRITICAL EXCLUSIONS** (DO NOT select these):
+❌ "Save" buttons (red circular buttons that appear on pins)
+❌ "Follow" buttons or user profile cards
+❌ Ads or "Promoted" pins (marked with "Ad" badge)
+❌ Small thumbnails or preview cards without large images
+❌ Navigation bars, search boxes, or sidebar elements
+❌ User avatars or profile pictures (separate from pin content)
+❌ Floating action buttons or overlay controls
+❌ Related pins sections in sidebar
+❌ "More ideas" or recommendation carousels
+
+✅ **WHAT TO SELECT**:
+✓ Pin cards with large preview images (typically 300-500px+ in height)
+✓ Pins that are part of the main masonry grid
+✓ Pins with visible titles/descriptions
+✓ High-quality content pins (not UI elements)
+
+🔍 **Recognition Tips**:
+- Pinterest pins are usually tall/vertical rectangles
+- Main content is in the masonry grid (center area)
+- Ignore markers on overlay buttons (they appear on hover)
+- Focus on the actual pin content, not interactive elements
+
+📊 **Output Format** (JSON only, no explanations):
+{{
+    "marker_ids": [1, 3, 7, 12, ...]
+}}
+
+⚡ **Constraints**:
+- Maximum {max_notes} pins
+- Total markers on page: {total_marks}
+- Return ONLY valid marker IDs (numbers on gold circles)
+- If fewer than {max_notes} pins match criteria, return fewer IDs
+"""
+
+        if content_description:
+            base_prompt += f"""
+- **Prioritize content matching**: Only select pins that clearly match "{content_description}"
+- If no pins match, return empty array []
+"""
+
+        base_prompt += """
+- Follow visual order: left to right, top to bottom
+- Only select markers you actually see in the image
+- Do NOT guess or fabricate numbers
+"""
+
+        return base_prompt
 
     def _parse_marker_ids(self, response_text: str) -> List[int]:
         """

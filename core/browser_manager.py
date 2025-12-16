@@ -22,11 +22,40 @@ class BrowserManager:
     封装 Playwright 浏览器的生命周期管理
     """
 
-    def __init__(self):
+    def __init__(self, site: str = "xiaohongshu"):
+        """
+        初始化浏览器管理器
+
+        Args:
+            site: 平台标识（xiaohongshu, pinterest等），用于区分不同平台的认证文件
+        """
+        self.site = site
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
+
+    def _get_auth_file_path(self) -> str:
+        """
+        获取平台特定的认证文件路径
+
+        Returns:
+            认证文件的完整路径
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        auth_dir = os.path.join(project_root, "auth")
+
+        # 创建 auth 目录（如果不存在）
+        os.makedirs(auth_dir, exist_ok=True)
+
+        # 平台特定的认证文件映射
+        auth_files = {
+            "xiaohongshu": "xiaohongshu.json",
+            "pinterest": "pinterest.json",
+        }
+
+        filename = auth_files.get(self.site, f"{self.site}.json")
+        return os.path.join(auth_dir, filename)
 
     async def start(self) -> Page:
         """
@@ -88,20 +117,22 @@ class BrowserManager:
 
     async def _load_cookies(self):
         """
-        从本地文件加载 Cookie
+        从平台特定的本地文件加载 Cookie
         如果文件不存在或格式错误，静默跳过
         """
-        if not os.path.exists(AUTH_FILE_PATH):
-            print(f"   - [Cookie] 未找到 Cookie 文件: {AUTH_FILE_PATH}")
+        auth_file_path = self._get_auth_file_path()
+
+        if not os.path.exists(auth_file_path):
+            print(f"   - [Cookie] 未找到 Cookie 文件: {auth_file_path}")
             return
 
         try:
-            with open(AUTH_FILE_PATH, "r", encoding="utf-8") as f:
+            with open(auth_file_path, "r", encoding="utf-8") as f:
                 cookies = json.load(f)
 
             if isinstance(cookies, list) and len(cookies) > 0:
                 await self.context.add_cookies(cookies)
-                print(f"   - [Cookie] 已加载 {len(cookies)} 条 Cookie")
+                print(f"   - [Cookie] 已加载 {len(cookies)} 条 Cookie (来自 {self.site})")
             else:
                 print("   - [Cookie] Cookie 文件为空或格式错误")
 
@@ -110,23 +141,23 @@ class BrowserManager:
 
     async def save_cookies(self, filepath: Optional[str] = None):
         """
-        保存当前 Context 的 Cookie 到文件
+        保存当前 Context 的 Cookie 到平台特定的文件
         用于保持登录态
 
         Args:
-            filepath: Cookie 保存路径，默认使用 AUTH_FILE_PATH
+            filepath: Cookie 保存路径，默认使用平台特定路径
         """
         if not self.context:
             print("❌ [BrowserManager] Context 未初始化，无法保存 Cookie")
             return
 
-        save_path = filepath or AUTH_FILE_PATH
+        save_path = filepath or self._get_auth_file_path()
 
         try:
             cookies = await self.context.cookies()
             with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(cookies, f, indent=2, ensure_ascii=False)
-            print(f"✅ [BrowserManager] Cookie 已保存到: {save_path}")
+            print(f"✅ [BrowserManager] Cookie 已保存到: {save_path} ({self.site})")
 
         except Exception as e:
             print(f"❌ [BrowserManager] Cookie 保存失败: {e}")

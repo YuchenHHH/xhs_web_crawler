@@ -78,7 +78,7 @@ class NoteDetailExtractor:
         print(f"   - 截图完成，大小: {len(screenshot_bytes) / 1024:.2f} KB")
 
         # 2. 调用 GPT-4o Vision 分析
-        print("   - 🤖 调用 GPT-4o 分析笔记内容...")
+        print("   - 🤖 分析笔记内容...")
 
         prompt = self._build_extraction_prompt()
 
@@ -219,7 +219,7 @@ class NoteDetailExtractor:
                 "title": "",
                 "author": "",
                 "publish_date": "",
-                "content_text": raw_content,  # 至少保留原始内容
+                "content_text": raw_content, 
                 "likes": "",
                 "comments": "",
                 "collects": "",

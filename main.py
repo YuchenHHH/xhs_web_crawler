@@ -1,5 +1,6 @@
 """
-小红书爬虫 Agent - 主入口
+多平台爬虫 Agent - 主入口
+支持小红书、Pinterest等多个平台
 支持并发执行多个关键词采集任务
 """
 import asyncio
@@ -19,11 +20,13 @@ if env_path.exists():
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.browser_manager import BrowserManager
-from core.crawler_strategy import XHSCrawlerStrategy
+from config.sites.xhs import XHSCrawlerStrategy
+from config.sites.pinterest import PinterestCrawlerStrategy
 from agent.graph import run_click_graph
 from agent.nodes import (
     init_browser_node,
     check_login_node,
+    manual_login_and_save_cookies_node,
     search_keyword_node,
 )
 from utils.logger import get_logger
@@ -37,12 +40,33 @@ logger.info(f"✅ 已加载环境变量: {env_path}" if env_path.exists() else f
 # 任务配置列表
 # ============================================
 MISSIONS = [
-    {"keyword": "番茄炒蛋", "description": "挑选成品菜肴"},
-    {"keyword": "红烧肉", "description": "挑选色泽红亮的"},
-    {"keyword": "清蒸鱼", "description": "完整鱼身"},
-    {"keyword": "宫保鸡丁", "description": "挑选与菜肴相关的内容"},
-    {"keyword": "麻婆豆腐", "description": "挑选与菜肴相关的内容"},
+    {"site": "xiaohongshu", "keyword": "宫保鸡丁做法", "description": "只挑选和菜谱,做菜流程相关的内容"},
 ]
+
+
+def get_crawler_strategy(site: str):
+    """
+    工厂函数：根据站点名称获取对应的爬虫策略
+
+    Args:
+        site: 站点标识（xiaohongshu, pinterest等）
+
+    Returns:
+        对应的 CrawlerStrategy 实例
+
+    Raises:
+        ValueError: 不支持的站点类型
+    """
+    strategies = {
+        "xiaohongshu": XHSCrawlerStrategy,
+        "pinterest": PinterestCrawlerStrategy,
+    }
+
+    strategy_class = strategies.get(site)
+    if not strategy_class:
+        raise ValueError(f"不支持的站点: {site}。可用站点: {list(strategies.keys())}")
+
+    return strategy_class()
 
 
 async def run_single_mission(
@@ -58,7 +82,7 @@ async def run_single_mission(
 
     Args:
         semaphore: 信号量，用于控制并发数
-        mission_config: 任务配置 {"keyword": "...", "description": "..."}
+        mission_config: 任务配置 {"site": "...", "keyword": "...", "description": "..."}
         max_notes: 每轮最多点击的笔记数量
         total_rounds: 总共执行的轮次
         browse_images_count: 每个笔记进入详情页后按右键浏览图片的次数
@@ -69,22 +93,23 @@ async def run_single_mission(
     """
     keyword = mission_config["keyword"]
     description = mission_config["description"]
+    site = mission_config.get("site", "xiaohongshu")  # 默认为小红书（向后兼容）
 
     async with semaphore:
-        # 初始化独立的 BrowserManager
-        browser_manager = BrowserManager()
+        # 初始化站点特定的 BrowserManager
+        browser_manager = BrowserManager(site=site)
 
-        # 初始化爬虫策略
-        crawler = XHSCrawlerStrategy()
+        # 使用工厂函数获取站点特定的爬虫策略
+        crawler = get_crawler_strategy(site)
 
         try:
-            logger.info(f"\n[{keyword}] 🚀 任务启动")
+            logger.info(f"\n[{site.upper()} | {keyword}] 🚀 任务启动")
 
-            # 创建输出目录
+            # 创建输出目录（包含站点前缀）
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = Path(__file__).parent / "output" / f"{keyword}_{timestamp}"
+            output_dir = Path(__file__).parent / "output" / f"{site}_{keyword}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"[{keyword}] 📁 输出目录: {output_dir}")
+            logger.info(f"[{site.upper()} | {keyword}] 📁 输出目录: {output_dir}")
 
             state = {
                 "browser_manager": browser_manager,
@@ -102,7 +127,7 @@ async def run_single_mission(
                 "is_logged_in": False,
             }
 
-            config_msg = f"[{keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图"
+            config_msg = f"[{site.upper()} | {keyword}] 📋 配置: 每轮{max_notes}个笔记 | {total_rounds}轮 | 每笔记浏览{browse_images_count}张图"
             if max_images:
                 config_msg += f" | 图片总数限制{max_images}张"
             logger.info(config_msg)
@@ -115,17 +140,34 @@ async def run_single_mission(
             updates = await check_login_node(state)
             state.update(updates)
 
+            # 如果未登录，触发手动登录流程
             if not state.get("is_logged_in"):
-                logger.warning(f"[{keyword}] ⚠️  未登录，跳过手动登录（使用共享 Cookie）")
-                # 注意：如果需要手动登录，多任务并发时需要协调处理
-                # 这里假设已经有 auth.json，否则第一个任务会触发登录
+                logger.warning(f"[{site.upper()} | {keyword}] ⚠️  未登录，启动手动登录流程...")
+                logger.info(f"[{site.upper()} | {keyword}] 💡 请在浏览器窗口中完成登录操作")
+                logger.info(f"[{site.upper()} | {keyword}] 📝 登录成功后将自动保存到: auth/{site}.json")
+
+                # 执行手动登录并保存 Cookie
+                updates = await manual_login_and_save_cookies_node(state)
+                state.update(updates)
+
+                # 检查登录是否成功
+                if not state.get("is_logged_in"):
+                    logger.error(f"[{site.upper()} | {keyword}] ❌ 登录超时或失败，任务终止")
+                    return {
+                        "site": site,
+                        "keyword": keyword,
+                        "status": "failed",
+                        "error": "登录失败或超时"
+                    }
+                else:
+                    logger.info(f"[{site.upper()} | {keyword}] ✅ 登录成功，Cookie已保存")
 
             # 搜索关键词
             updates = await search_keyword_node(state)
             state.update(updates)
 
             # 执行点击任务
-            logger.info(f"[{keyword}] 🎯 开始执行点击任务...")
+            logger.info(f"[{site.upper()} | {keyword}] 🎯 开始执行点击任务...")
             click_result = await run_click_graph(
                 page=state["page"],
                 crawler=crawler,
@@ -143,6 +185,7 @@ async def run_single_mission(
             )
 
             result_summary = {
+                "site": site,
                 "keyword": keyword,
                 "status": "success",
                 "rounds": click_result.get('current_round', 1) - 1,
@@ -152,23 +195,23 @@ async def run_single_mission(
                 "output_dir": str(output_dir),
             }
 
-            logger.info(f"\n[{keyword}] ✅ 任务完成 - 点击{result_summary['total_clicked']}个 | 进入详情页{entered_count}个")
+            logger.info(f"\n[{site.upper()} | {keyword}] ✅ 任务完成 - 点击{result_summary['total_clicked']}个 | 进入详情页{entered_count}个")
 
             return result_summary
 
         except KeyboardInterrupt:
-            logger.warning(f"\n[{keyword}] ⚠️  任务被用户中断")
-            return {"keyword": keyword, "status": "interrupted", "error": "用户中断"}
+            logger.warning(f"\n[{site.upper()} | {keyword}] ⚠️  任务被用户中断")
+            return {"site": site, "keyword": keyword, "status": "interrupted", "error": "用户中断"}
 
         except Exception as e:
-            logger.error(f"\n[{keyword}] ❌ 任务异常: {e}")
+            logger.error(f"\n[{site.upper()} | {keyword}] ❌ 任务异常: {e}")
             import traceback
             traceback.print_exc()
-            return {"keyword": keyword, "status": "failed", "error": str(e)}
+            return {"site": site, "keyword": keyword, "status": "failed", "error": str(e)}
 
         finally:
             # 清理资源
-            logger.info(f"[{keyword}] 🧹 清理浏览器资源...")
+            logger.info(f"[{site.upper()} | {keyword}] 🧹 清理浏览器资源...")
             await browser_manager.close()
 
 
@@ -180,15 +223,16 @@ async def main(max_concurrent: int = 3):
         max_concurrent: 最大并发任务数（默认3个）
     """
     logger.info("\n" + "="*60)
-    logger.info("🤖 小红书爬虫 Agent 启动（并发模式）")
+    logger.info("🤖 多平台爬虫 Agent 启动（并发模式）")
     logger.info("="*60 + "\n")
 
-    logger.info(f"📋 任务列表: 共 {len(MISSIONS)} 个关键词")
+    logger.info(f"📋 任务列表: 共 {len(MISSIONS)} 个任务")
     for i, mission in enumerate(MISSIONS, 1):
-        logger.info(f"   {i}. {mission['keyword']} - {mission['description']}")
+        site = mission.get("site", "xiaohongshu")
+        logger.info(f"   {i}. [{site.upper()}] {mission['keyword']} - {mission['description']}")
 
     logger.info(f"\n⚙️  并发配置: 最大并发数 = {max_concurrent}")
-    logger.info(f"⚙️  Cookie 文件: {'✅ 存在' if Path('auth.json').exists() else '❌ 不存在（第一个任务将触发登录）'}")
+    logger.info(f"⚙️  认证目录: auth/ (各平台使用独立认证文件)")
     logger.info("")
 
     # 创建信号量控制并发数
@@ -235,16 +279,17 @@ async def main(max_concurrent: int = 3):
                 failed_count += 1
             elif isinstance(result, dict):
                 status = result.get('status', 'unknown')
+                site = result.get('site', 'unknown')
                 keyword = result.get('keyword', 'N/A')
 
                 if status == 'success':
-                    logger.info(f"✅ [{keyword}] 成功 - 点击{result.get('total_clicked', 0)}个 | 详情页{result.get('entered_detail', 0)}个")
+                    logger.info(f"✅ [{site.upper()} | {keyword}] 成功 - 点击{result.get('total_clicked', 0)}个 | 详情页{result.get('entered_detail', 0)}个")
                     success_count += 1
                 elif status == 'interrupted':
-                    logger.warning(f"⚠️  [{keyword}] 中断")
+                    logger.warning(f"⚠️  [{site.upper()} | {keyword}] 中断")
                     failed_count += 1
                 else:
-                    logger.error(f"❌ [{keyword}] 失败 - {result.get('error', 'Unknown error')}")
+                    logger.error(f"❌ [{site.upper()} | {keyword}] 失败 - {result.get('error', 'Unknown error')}")
                     failed_count += 1
 
         logger.info("")
@@ -264,7 +309,7 @@ def run():
     便捷启动函数（同步包装）
     支持命令行参数
     """
-    parser = argparse.ArgumentParser(description="小红书爬虫 Agent")
+    parser = argparse.ArgumentParser(description="多平台爬虫 Agent（支持小红书、Pinterest等）")
     parser.add_argument(
         "--concurrent",
         "-c",
